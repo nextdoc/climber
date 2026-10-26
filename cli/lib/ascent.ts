@@ -56,6 +56,7 @@ export type Outcome = z.infer<typeof Outcome>;
 export const HistoryEntry = z.strictObject({
   iteration: z.int().nonnegative(),
   at: z.iso.datetime(),
+  finishedAt: z.iso.datetime().optional(),
   outcome: Outcome,
   dryRun: z.boolean(),
   reason: z.string().optional(),

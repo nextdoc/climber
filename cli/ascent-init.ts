@@ -13,6 +13,7 @@ import {
   saveConfig,
   scoresByName
 } from "./lib/ascent.ts";
+import { writeReport } from "./lib/report.ts";
 
 type Options = { targetOrg: string; from: string; config: string };
 
@@ -46,13 +47,15 @@ new Command()
     git(REPO_ROOT, "worktree", "add", "-b", branch, worktree, baseCommit);
     saveConfig(config);
 
+    const at = new Date().toISOString();
     const folder = runDir(name, 0);
     mkdirSync(folder, { recursive: true });
     const result = collectAndScore(config, folder);
     if (result.gated) throw new Error(`Baseline is gated by ${result.gate}; fix it before starting an ascent`);
     appendHistory(name, {
       iteration: 0,
-      at: new Date().toISOString(),
+      at,
+      finishedAt: new Date().toISOString(),
       outcome: "baseline",
       dryRun: false,
       scores: scoresByName(result),
@@ -60,6 +63,7 @@ new Command()
       commit: baseCommit,
       run: folder
     });
-    console.log(JSON.stringify({ ascent: name, branch, worktree, baseline: scoresByName(result), overall: result.overall }, null, 2));
+    const report = writeReport(name);
+    console.log(JSON.stringify({ ascent: name, branch, worktree, baseline: scoresByName(result), overall: result.overall, report }, null, 2));
   })
   .parse();

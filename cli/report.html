@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ascent report</title>
+<script src="https://cdn.jsdelivr.net/npm/vega@5.30.0/build/vega.min.js" integrity="sha384-em7CHpJd+SsMugVFf6TY7AKQcLWMcbPhD84hmNK8o6WFDkK+2uHSUQRVQV1/w827" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5.21.0/build/vega-lite.min.js" integrity="sha384-GhkD6ks9/zgY1m5EFOUZWz/vMVMUFF/92DL61RZc+B42J8osL+jNufKv68bNHHZ2" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6.26.0/build/vega-embed.min.js" integrity="sha384-TqXb8su49m5OnEpKGO8m+VrgHesrUxyP22HgpXi4hnh1Hm43dXroiSYemNf5D8lv" crossorigin="anonymous"></script>
+<style>
+:root{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e6e5e0;--keep:#2a78d6;--discard:#8f8e89;--gated:#c26a1b;--rejected:#b8433a;--nochange:#b5b4ae;--error:#8e2a8e;--up:#1f7a3d;--down:#b8433a}
+@media (prefers-color-scheme:dark){:root{--surface:#1a1a19;--text:#fff;--muted:#c3c2b7;--grid:#383835;--keep:#3987e5;--discard:#8f8e89;--gated:#e08a3c;--rejected:#e0675d;--nochange:#5e5d59;--error:#c565c5;--up:#4cc176;--down:#e0675d}}
+body{margin:0;padding:24px 16px;background:var(--surface);color:var(--text);font:14px/1.4 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+.meta{color:var(--muted);font-size:13px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.meta b{color:var(--text);font-weight:500}
+code{font:12px ui-monospace,monospace}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:24px}
+.card{border:1px solid var(--grid);border-radius:10px;padding:14px 16px;display:flex;gap:16px;align-items:center}
+.card svg.graphic{flex:none}
+.card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+.card .big{font-size:28px;font-weight:600;line-height:1.1}
+.card .sub{color:var(--muted);font-size:13px;margin-top:4px}
+.card .row{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:13px}
+.card .row svg{flex:none;color:var(--muted)}
+h2{font-size:14px;color:var(--muted);font-weight:600;margin:28px 0 8px}
+.chart{width:100%}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{color:var(--muted);font-weight:600;text-align:left;font-size:12px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--grid);vertical-align:top}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.up{color:var(--up)}.down{color:var(--down)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:500;color:#fff;white-space:nowrap}
+.tag{display:inline-block;margin-top:4px;padding:0 6px;border:1px solid var(--grid);border-radius:4px;font-size:11px;color:var(--muted)}
+.focus{color:var(--muted);font-size:12px}
+.notes p{margin:0 0 6px}.notes p:last-child{margin:0}
+.notes .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-right:6px}
+.deltas{white-space:nowrap}
+a{color:var(--keep)}
+</style>
+</head>
+<body><main>
+<h1 id="title"></h1>
+<div class="meta" id="meta"></div>
+<div class="tiles" id="tiles"></div>
+<h2>Overall score by hours since baseline: current kept (line), fitted climb (dashed)</h2>
+<div class="chart" id="climb"></div>
+<h2>Minutes per iteration</h2>
+<div class="chart" id="durations"></div>
+<h2>Dimensions</h2>
+<div class="scroll"><table id="dimensions"></table></div>
+<h2>Iterations</h2>
+<div class="scroll"><table id="iterations"></table></div>
+</main>
+<script>
+const data = /*DATA*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+const f = (x, d = 2) => x == null ? '–' : x.toFixed(d);
+const signed = (x, d = 1) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d);
+const trend = x => x > 0 ? 'up' : x < 0 ? 'down' : '';
+const s = data.summary, a = data.ascent;
+const OUTCOMES = ['keep', 'discard', 'gated', 'rejected', 'no-change', 'error'];
+const colour = o => css(o === 'no-change' ? '--nochange' : `--${o}`);
+
+document.title = `${a.name} ascent`;
+document.getElementById('title').textContent = `${a.name} ascent`;
+const when = t => new Date(t).toLocaleString();
+document.getElementById('meta').innerHTML = [
+  ['Org', esc(a.targetOrg)], ['Branch', `<code>${esc(a.branch)}</code>`], ['Base', `<code>${esc(a.baseCommit.slice(0, 8))}</code>`],
+  ['Started', esc(when(a.createdAt))], ['Updated', esc(when(a.updatedAt))]
+].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+
+const icon = d => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const icons = {
+  target: icon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>'),
+  up: icon('<path d="M12 19V5M5 12l7-7 7 7"/>'),
+  down: icon('<path d="M12 5v14M5 12l7 7 7-7"/>'),
+  trend: icon('<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>'),
+  clock: icon('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  flask: icon('<path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3"/>'),
+  check: icon('<path d="M5 12l5 5 9-10"/>')};
+const scoreBar = (() => {
+  const w = 96, x = v => Math.max(0, Math.min(100, v)) / 100 * w;
+  return `<svg class="graphic" width="${w}" height="44" viewBox="0 0 ${w} 44">
+    <rect x="0" y="18" width="${w}" height="8" rx="4" fill="var(--grid)"/>
+    <rect x="0" y="18" width="${x(s.baseline)}" height="8" rx="4" fill="var(--discard)"/>
+    <rect x="${x(s.baseline)}" y="18" width="${Math.max(0, x(s.current) - x(s.baseline))}" height="8" rx="2" fill="var(--keep)"/>
+    <text x="0" y="42" font-size="10" fill="var(--muted)">0</text>
+    <text x="${w}" y="42" font-size="10" fill="var(--muted)" text-anchor="end">100</text></svg>`;})();
+const gauge = (() => {
+  const r = 40, t = Math.max(-90, Math.min(90, s.angle)) * Math.PI / 180;
+  return `<svg class="graphic" width="56" height="56" viewBox="0 0 56 56">
+    <path d="M ${6 + r} 48 A ${r} ${r} 0 0 0 6 ${48 - r}" fill="none" stroke="var(--grid)" stroke-width="6"/>
+    <line x1="6" y1="48" x2="${6 + r}" y2="48" stroke="var(--grid)" stroke-width="1"/>
+    <line x1="6" y1="48" x2="${6 + r * Math.SQRT1_2}" y2="${48 - r * Math.SQRT1_2}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="2 2"/>
+    <line x1="6" y1="48" x2="${6 + r * Math.cos(t)}" y2="${48 - r * Math.sin(t)}" stroke="var(--keep)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="6" cy="48" r="3" fill="var(--text)"/></svg>`;})();
+const ring = (() => {
+  const r = 22, c = 2 * Math.PI * r, share = s.iterations ? s.kept / s.iterations : 0;
+  return `<svg class="graphic" width="56" height="56" viewBox="0 0 56 56">
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--grid)" stroke-width="6"/>
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--keep)" stroke-width="6" stroke-linecap="round"
+      stroke-dasharray="${share * c} ${c}" transform="rotate(-90 28 28)"/>
+    <text x="28" y="32" font-size="12" font-weight="600" text-anchor="middle" fill="var(--text)">${Math.round(share * 100)}%</text></svg>`;})();
+const gainPct = s.baseline ? s.gain / s.baseline * 100 : 0;
+document.getElementById('tiles').innerHTML = `
+  <div class="card">${scoreBar}<div>
+    <div class="label">${icons.target} Gain on baseline</div>
+    <div class="big">${signed(gainPct)}%</div>
+    <div class="row">${s.gain >= 0 ? icons.up : icons.down}Current <b>${f(s.current)}</b> from ${f(s.baseline)} baseline</div></div></div>
+  <div class="card">${gauge}<div>
+    <div class="label">${icons.trend} Climb angle</div>
+    <div class="big">${f(s.angle, 1)}°</div>
+    <div class="sub">45° is one point an hour</div>
+    <div class="row"><b>${f(s.perHour)}</b> pts/hour · <b>${f(s.perIteration)}</b> pts/iteration</div></div></div>
+  <div class="card">${ring}<div>
+    <div class="label">${icons.check} Kept</div>
+    <div class="big">${s.kept} <span style="font-size:16px;color:var(--muted)">of ${s.iterations}</span></div>
+    <div class="row">${icons.clock}<b>${f(s.hours, 1)}</b> hours</div>
+    <div class="row">${icons.flask}<b>${f(s.minutesPerIteration, 1)}</b> min/iteration</div></div></div>`;
+
+const climb = data.rows.filter(r => !r.dryRun);
+const scored = climb.filter(r => r.overall != null);
+const unscored = climb.filter(r => r.overall == null);
+const steps = [{hours: 0, current: s.baseline}].concat(climb.map(r => ({hours: r.hours, current: r.current})));
+const config = {background: css('--surface'), view: {stroke: null},
+  axis: {labelColor: css('--muted'), titleColor: css('--muted'), gridColor: css('--grid'), domainColor: css('--grid'), tickColor: css('--grid')},
+  legend: {labelColor: css('--text'), titleColor: css('--muted')}};
+const outcome = {field: 'outcome', title: 'Outcome', scale: {domain: OUTCOMES, range: OUTCOMES.map(colour)}};
+const tip = [{field: 'iteration', title: 'Iteration'}, {field: 'outcome', title: 'Outcome'},
+  {field: 'overall', title: 'Score', format: '.2f'}, {field: 'current', title: 'Current kept', format: '.2f'},
+  {field: 'hours', title: 'Hours', format: '.2f'}, {field: 'minutes', title: 'Minutes', format: '.1f'},
+  {field: 'focusText', title: 'Focus'}, {field: 'reason', title: 'Reason'}];
+const withFocus = rows => rows.map(r => ({...r, focusText: r.focus.join(', ')}));
+const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Hours since baseline', scale: {domainMin: 0}};
+vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
+  vconcat: [
+    {width: 'container', height: 320, layer: [
+      {data: {values: steps}, mark: {type: 'line', interpolate: 'step-after', strokeWidth: 2, color: css('--keep')},
+       encoding: {x: {...hoursAxis, axis: {title: null, labels: false}}, y: {field: 'current', type: 'quantitative', title: 'Overall score', scale: {zero: false}}}},
+      {data: {values: s.fit}, mark: {type: 'line', strokeDash: [6, 4], strokeWidth: 2, color: css('--muted')},
+       encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'fit', type: 'quantitative'}}},
+      {data: {values: withFocus(scored)}, mark: {type: 'point', size: 90, strokeWidth: 2, opacity: 1},
+       encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'overall', type: 'quantitative'},
+                  color: outcome, shape: {field: 'outcome', legend: null},
+                  fill: {condition: {test: "datum.outcome === 'keep'", value: css('--keep')}, value: css('--surface')},
+                  tooltip: tip}}]},
+    {width: 'container', height: 60, data: {values: withFocus(unscored)}, mark: {type: 'tick', thickness: 2, size: 14},
+     encoding: {x: hoursAxis, y: {field: 'outcome', type: 'nominal', title: null, scale: {domain: ['gated', 'rejected', 'no-change', 'error']}},
+                color: {...outcome, legend: null}, tooltip: tip}}
+  ], resolve: {scale: {x: 'shared'}}}, {actions: false});
+vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', width: 'container', height: 200, config,
+  data: {values: withFocus(climb.filter(r => r.minutes != null))},
+  mark: {type: 'bar', cornerRadiusTopLeft: 4, cornerRadiusTopRight: 4},
+  encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration'},
+             y: {field: 'minutes', type: 'quantitative', title: 'Minutes'},
+             color: outcome, tooltip: tip}}, {actions: false});
+
+const spark = series => {
+  const w = 96, h = 24, lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1;
+  const pts = series.map((v, i) => [series.length > 1 ? i / (series.length - 1) * w : w / 2, h - 2 - (v - lo) / span * (h - 4)]);
+  const [lx, ly] = pts.at(-1);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="var(--keep)" stroke-width="1.5"/><circle cx="${lx}" cy="${ly}" r="2.5" fill="var(--keep)"/></svg>`;
+};
+document.getElementById('dimensions').innerHTML = `
+  <tr><th>Dimension</th><th class="num">Baseline</th><th class="num">Current</th><th class="num">Change</th><th class="num">Margin</th><th>Kept iterations</th></tr>
+  ${data.dimensions.map(d => `<tr><td>${esc(d.name)}</td><td class="num">${f(d.baseline, 1)}</td><td class="num">${f(d.current, 1)}</td>
+    <td class="num ${trend(d.delta)}">${signed(d.delta)}</td><td class="num">${d.margin}</td><td>${spark(d.series)}</td></tr>`).join('')}`;
+
+const deltas = r => r.deltas ? Object.entries(r.deltas).filter(([, v]) => v !== 0)
+  .map(([k, v]) => `<div class="deltas">${esc(k)} <span class="${trend(v)}">${signed(v)}</span></div>`).join('') || '<span class="focus">no change</span>' : '';
+const note = (k, v) => v ? `<p><span class="k">${k}</span>${esc(v)}</p>` : '';
+const link = (label, href) => href ? `<div><a href="${esc(href)}">${label}</a></div>` : '';
+document.getElementById('iterations').innerHTML = `
+  <tr><th class="num">#</th><th>Outcome</th><th class="num">Overall</th><th>Changes vs kept</th><th>Plan, decision and learning</th><th>Files</th></tr>
+  ${[...data.rows].reverse().map(r => `<tr>
+    <td class="num">${r.iteration}</td>
+    <td><span class="pill" style="background:${colour(r.outcome)}">${esc(r.outcome)}</span>${r.dryRun ? '<div><span class="tag">dry run</span></div>' : ''}
+      ${r.focus.length ? `<div class="focus" style="margin-top:6px">${esc(r.focus.join(', '))}</div>` : ''}</td>
+    <td class="num">${f(r.overall)}</td>
+    <td>${deltas(r)}</td>
+    <td class="notes">${note('Reason', r.reason)}${note('Decision', r.decision.join('; '))}${note('Learning', r.learning)}</td>
+    <td>${link('patch', r.patch)}${link('run', r.run)}</td></tr>`).join('')}`;
+</script>
+</body>
+</html>

@@ -22,6 +22,7 @@ import {
   type HistoryEntry,
   type Step
 } from "./lib/ascent.ts";
+import { writeReport } from "./lib/report.ts";
 import { DIMENSION_NAMES, findings, scoreRun } from "./lib/scoring.ts";
 
 type Options = { dryRun: boolean };
@@ -226,7 +227,9 @@ new Command()
       }
     }
 
+    entry.finishedAt = new Date().toISOString();
     appendHistory(name, entry);
+    writeReport(name);
     const all = [...history, entry];
     const discards = consecutiveDiscards(all);
     console.log(
@@ -242,7 +245,8 @@ new Command()
           overall: entry.overall,
           deltas,
           consecutiveDiscards: discards,
-          stop: discards >= config.maxDiscards
+          stop: discards >= config.maxDiscards,
+          report: join(ascentDir(name), "report.html")
         },
         null,
         2
