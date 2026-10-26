@@ -86,7 +86,7 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
       hours: round(hours),
       perHour: round(perHour.slope),
       perIteration: climb.length ? round((current - baseline.overall) / climb.length) : 0,
-      angle: round((Math.atan(perHour.slope) * 180) / Math.PI, 1),
+      angle: climb.length ? round((Math.atan((current - baseline.overall) / climb.length) * 180) / Math.PI, 1) : 0,
       minutesPerIteration: timed.length ? round(timed.reduce((s, r) => s + r.minutes!, 0) / timed.length, 1) : null,
       fit: [
         { hours: 0, fit: round(perHour.intercept) },
