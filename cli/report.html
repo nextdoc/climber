@@ -182,7 +182,7 @@ vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', 
 vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', width: 'container', height: 200, config,
   data: {values: withFocus(climb.filter(r => r.minutes != null))},
   mark: {type: 'bar', cornerRadiusTopLeft: 4, cornerRadiusTopRight: 4, width: {expr: "min(40, bandwidth('x') * 0.8)"}},
-  encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration'},
+  encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration', axis: {labelAngle: 0}},
              y: {field: 'minutes', type: 'quantitative', title: 'Minutes'},
              color: outcome, tooltip: tip}}, {actions: false});
 
