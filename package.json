@@ -15,7 +15,8 @@
     "prettier-plugin-apex": "2.3.0"
   },
   "dependencies": {
-    "commander": "15.0.0"
+    "commander": "15.0.0",
+    "zod": "4.6.7"
   },
   "type": "module"
 }
