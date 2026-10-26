@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Command } from "commander";
 import { z } from "zod";
@@ -11,6 +11,8 @@ import {
   collectAndScore,
   consecutiveDiscards,
   decide,
+  editableFiles,
+  formatApp,
   git,
   kept,
   loadConfig,
@@ -30,13 +32,6 @@ type Options = { dryRun: boolean };
 const Plan = z.object({ reason: z.string().min(1), focus: z.array(z.string()), edits: z.array(z.string()).default([]) });
 
 const Learning = z.object({ learning: z.string().min(1) });
-
-function editableFiles(config: AscentConfig): Set<string> {
-  const glob = (patterns: string[]) => new Set(patterns.flatMap((p) => globSync(p, { cwd: config.worktree })));
-  const tests = glob(config.test).union(new Set(classFiles(config.worktree, config.testClasses.holdout)));
-  const apps = [...glob(config.app)].filter((f) => !tests.has(f));
-  return new Set(apps.flatMap((f) => [f, `${f}-meta.xml`]));
-}
 
 function summariseHistory(history: HistoryEntry[]): string {
   return history
@@ -204,6 +199,7 @@ new Command()
       if (planChanged.length > 0) throw new Error(`plan step changed files: ${planChanged.join(", ")}`);
       runStep(config, folder, "implement", implementPrompt(plan, editableBefore), entry);
       if (holdout.length > 0) git(config.worktree, "checkout", "HEAD", "--", ...holdout);
+      formatApp(config);
 
       git(config.worktree, "add", "-A");
       const changed = git(config.worktree, "diff", "--cached", "--name-only").split("\n").filter(Boolean);

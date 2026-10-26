@@ -7,6 +7,7 @@ import {
   AscentDefaults,
   ascentDir,
   collectAndScore,
+  formatApp,
   git,
   REPO_ROOT,
   runDir,
@@ -46,6 +47,11 @@ new Command()
     if (missing.length > 0) throw new Error(`Test classes not found at ${baseCommit}: ${missing.join(", ")}`);
     git(REPO_ROOT, "worktree", "add", "-b", branch, worktree, baseCommit);
     saveConfig(config);
+    formatApp(config);
+    if (git(worktree, "status", "--porcelain") !== "") {
+      git(worktree, "commit", "-q", "-am", `ASCENT ${name} format baseline`);
+    }
+    const startCommit = git(worktree, "rev-parse", "HEAD");
 
     const at = new Date().toISOString();
     const folder = runDir(name, 0);
@@ -60,7 +66,7 @@ new Command()
       dryRun: false,
       scores: scoresByName(result),
       overall: result.overall,
-      commit: baseCommit,
+      commit: startCommit,
       run: folder
     });
     const report = writeReport(name);

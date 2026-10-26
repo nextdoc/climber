@@ -137,6 +137,23 @@ export function git(cwd: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
+/** Application files and their metadata, relative to the worktree. */
+export function editableFiles(config: AscentConfig): Set<string> {
+  const glob = (patterns: string[]) => new Set(patterns.flatMap((p) => globSync(p, { cwd: config.worktree })));
+  const tests = glob(config.test).union(new Set(classFiles(config.worktree, config.testClasses.holdout)));
+  const apps = [...glob(config.app)].filter((f) => !tests.has(f));
+  return new Set(apps.flatMap((f) => [f, `${f}-meta.xml`]));
+}
+
+/** Formats the application classes with Prettier, so line coverage cannot be gamed by packing statements onto one line. */
+export function formatApp(config: AscentConfig) {
+  const files = [...editableFiles(config)].filter((f) => f.endsWith(".cls") && existsSync(join(config.worktree, f)));
+  if (files.length === 0) return;
+  // The worktree sits under target/, which .gitignore excludes, and Prettier honours .gitignore by default.
+  const result = run(join(REPO_ROOT, "node_modules/.bin/prettier"), ["--write", "--ignore-path=", ...files], config.worktree);
+  if (result.status !== 0) throw new Error(`prettier failed: ${result.stderr.trim()}`);
+}
+
 /** Deploys, analyses and tests the worktree into the run folder, then scores it. */
 export function collectAndScore(config: AscentConfig, folder: string): ScoreResult {
   const prepare = join(REPO_ROOT, "cli/score-prepare.sh");

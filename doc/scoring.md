@@ -35,11 +35,14 @@ Source: `sf apex run test -n AccountHealthRollupTest --code-coverage --result-fo
 | Dimension | Formula | Baseline | Baseline score |
 |---|---|---|---|
 | Tests passing | `100 × passing / ran` | 13 of 13 pass | 100 |
-| Code coverage | `100 × covered lines / lines` over application classes | 76 of 76 lines | 100 |
+| Code coverage | `100 × covered lines / lines` over application classes | 91 of 91 lines (76 before formatting) | 100 |
 | Test run time | `100 × K / (K + P)`, `P` = seconds, `K` = 40 | 60.5 s | 39.8 |
 
 - Test run time reuses the half-score formula with seconds as the penalty. `K` = 40 s was the run time before the headroom test was added. The headroom test raised it to about 60 s.
 - Run time is noisy between runs (41 to 46 s before the headroom test). `K` and the keep margin should be set from repeated unchanged runs.
+- Coverage is per line, so an agent can raise it by packing an untested branch onto a line that runs anyway, such as `if (x) { y(); }`. Two checks stop this:
+  1. Formatting: `ascent-init` formats the baseline and `iterate` formats every candidate with Prettier (`formatApp` in `cli/lib/ascent.ts`) before scoring. Prettier puts `if`, `for` and `while` bodies on their own lines. Ternaries and `&&`/`||` chains stay on one line, so those can still hide a branch.
+  2. Braces: the PMD rules `IfStmtsMustUseBraces`, `IfElseStmtsMustUseBraces`, `ForLoopsMustUseBraces` and `WhileLoopsMustUseBraces` (Moderate, already selected by `--rule-selector pmd`) penalise brace-less bodies such as `if (x) y();`.
 - Code coverage counts only application classes, so `Fixtures.cls` is excluded. An application class that no test executes is absent from Salesforce's coverage results. It is listed under `notRun` but adds no lines, so dead code does not lower the score.
 
 ### Governor limits
