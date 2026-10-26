@@ -53,6 +53,8 @@ a{color:var(--keep)}
 <div class="scroll"><table id="dimensions"></table></div>
 <h2>Iterations</h2>
 <div class="scroll"><table id="iterations"></table></div>
+<h2 id="cost-title">Cumulative agent cost by step</h2>
+<div class="chart" id="cost"></div>
 </main>
 <script>
 const data = /*DATA*/null;
@@ -162,6 +164,17 @@ vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.jso
   encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration'},
              y: {field: 'minutes', type: 'quantitative', title: 'Minutes'},
              color: outcome, tooltip: tip}}, {actions: false});
+
+const usd = x => `$${x.toFixed(2)}`;
+document.getElementById("cost-title").textContent =
+  `Cumulative agent cost by step: ${usd(data.cost.total)} total (${Object.entries(data.cost.byStep).map(([k, v]) => `${k} ${usd(v)}`).join(", ")}), estimated at list price`;
+vegaEmbed("#cost", {$schema: "https://vega.github.io/schema/vega-lite/5.json", width: "container", height: 240, config,
+  data: {values: data.cost.series},
+  mark: {type: "area", interpolate: "step-after", line: true, opacity: 0.85},
+  encoding: {x: hoursAxis,
+             y: {field: "usd", type: "quantitative", stack: "zero", title: "Cumulative cost (USD)", axis: {format: "$.2f"}},
+             color: {field: "step", title: "Step", scale: {domain: ["plan", "implement", "learn"], range: [css("--keep"), css("--gated"), css("--discard")]}},
+             tooltip: [{field: "step", title: "Step"}, {field: "hours", title: "Hours", format: ".2f"}, {field: "usd", title: "Cumulative", format: "$.2f"}]}}, {actions: false});
 
 const spark = series => {
   const w = 96, h = 24, lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1;

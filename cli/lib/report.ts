@@ -9,6 +9,8 @@ const PLACEHOLDER = "/*DATA*/null";
 
 const HOUR = 3_600_000;
 
+const STEPS = ["plan", "implement", "learn"] as const;
+
 const round = (x: number, digits = 2) => Number(x.toFixed(digits));
 
 /** Least squares slope and intercept of [x, y] points. */
@@ -58,7 +60,8 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
         learning: e.learning,
         deltas,
         patch: e.patch && relative(dir, e.patch),
-        run: e.run && relative(dir, e.run)
+        run: e.run && relative(dir, e.run),
+        cost: Object.fromEntries(STEPS.map((s) => [s, e.steps?.[s]?.costUsd ?? 0]))
       };
     });
 
@@ -67,6 +70,15 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
   const perHour = fit([[0, baseline.overall], ...climb.map((r): [number, number] => [r.hours, r.current])]);
   const timed = climb.filter((r) => r.minutes !== undefined);
   const hours = last?.hours ?? 0;
+
+  const totals = Object.fromEntries(STEPS.map((s) => [s, 0]));
+  const series = STEPS.map((step) => ({ hours: 0, step, usd: 0 }));
+  for (const r of rows) {
+    for (const step of STEPS) {
+      totals[step] += r.cost[step];
+      series.push({ hours: r.hours, step, usd: round(totals[step], 4) });
+    }
+  }
 
   return {
     ascent: {
@@ -92,6 +104,11 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
         { hours: 0, fit: round(perHour.intercept) },
         { hours, fit: round(perHour.intercept + perHour.slope * hours) }
       ]
+    },
+    cost: {
+      total: round(STEPS.reduce((s, step) => s + totals[step], 0)),
+      byStep: Object.fromEntries(STEPS.map((s) => [s, round(totals[s])])),
+      series
     },
     dimensions: DIMENSION_NAMES.map((name) => ({
       name,

@@ -1,25 +1,29 @@
 {
-  "app": ["force-app/**/classes/*.cls"],
+  "app": [
+    "force-app/**/classes/*.cls"
+  ],
   "test": [
     "force-app/**/classes/*Test.cls",
     "force-app/**/classes/Fixtures.cls"
   ],
   "testClasses": {
-    "sample": ["AccountHealthRollupTest"],
+    "sample": [
+      "AccountHealthRollupTest"
+    ],
     "holdout": []
   },
   "steps": {
     "plan": {
       "model": "claude-opus-5-5",
-      "command": "claude -p --model \"$MODEL\" --allowedTools Read,Glob,Grep"
+      "command": "claude -p --output-format json --model \"$MODEL\" --allowedTools Read,Glob,Grep"
     },
     "implement": {
       "model": "claude-sonnet-5-5",
-      "command": "claude -p --model \"$MODEL\" --permission-mode acceptEdits --allowedTools Read,Edit,Write,Glob,Grep"
+      "command": "claude -p --output-format json --model \"$MODEL\" --permission-mode acceptEdits --allowedTools Read,Edit,Write,Glob,Grep"
     },
     "learn": {
       "model": "claude-sonnet-5-5",
-      "command": "claude -p --model \"$MODEL\" --tools \"\""
+      "command": "claude -p --output-format json --model \"$MODEL\" --tools \"\""
     }
   },
   "maxDiscards": 5,

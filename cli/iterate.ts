@@ -126,13 +126,33 @@ function lastJson<T>(output: string, schema: z.ZodType<T>): T {
   throw new Error("Agent reply has no matching JSON object");
 }
 
-function runStep(config: AscentConfig, folder: string, name: keyof AscentConfig["steps"], prompt: string): string {
+/** The JSON a `claude -p --output-format json` step prints. */
+const ClaudeResult = z.object({ result: z.string(), total_cost_usd: z.number(), num_turns: z.int() });
+
+function runStep(
+  config: AscentConfig,
+  folder: string,
+  name: keyof AscentConfig["steps"],
+  prompt: string,
+  entry: HistoryEntry
+): string {
   const step: Step = config.steps[name];
   writeFileSync(join(folder, `${name}-prompt.md`), prompt);
+  const started = Date.now();
   const result = run("sh", ["-c", step.command], config.worktree, prompt, { MODEL: step.model });
   writeFileSync(join(folder, `${name}.txt`), result.stdout + result.stderr);
+  let parsed: z.infer<typeof ClaudeResult> | undefined;
+  try {
+    parsed = ClaudeResult.parse(JSON.parse(result.stdout));
+  } catch {
+    // Plain text output, which carries no cost.
+  }
+  entry.steps = {
+    ...entry.steps,
+    [name]: { model: step.model, durationMs: Date.now() - started, costUsd: parsed?.total_cost_usd, turns: parsed?.num_turns }
+  };
   if (result.status !== 0) throw new Error(`${name} step exited ${result.status}, see ${join(folder, `${name}.txt`)}`);
-  return result.stdout;
+  return parsed?.result ?? result.stdout;
 }
 
 /** Appends the entry, or when it fails validation, a minimal error entry, keeping the full entry in the run folder. */
@@ -141,10 +161,10 @@ function record(name: string, folder: string, entry: HistoryEntry) {
     appendHistory(name, entry);
   } catch (error) {
     writeFileSync(join(folder, "entry.json"), JSON.stringify(entry, null, 2));
-    const { iteration, at, finishedAt, dryRun, reason, patch, patchHash } = entry;
+    const { iteration, at, finishedAt, dryRun, reason, patch, patchHash, steps } = entry;
     const decision = [`history entry invalid, see ${join(folder, "entry.json")}: ${(error as Error).message}`];
     Object.assign(entry, { outcome: "error", decision });
-    appendHistory(name, { iteration, at, finishedAt, outcome: "error", dryRun, reason, patch, patchHash, run: folder, decision });
+    appendHistory(name, { iteration, at, finishedAt, outcome: "error", dryRun, reason, patch, patchHash, run: folder, decision, steps });
   }
 }
 
@@ -174,7 +194,7 @@ new Command()
 
     try {
       for (const file of holdout) rmSync(join(config.worktree, file));
-      const plan = lastJson(runStep(config, folder, "plan", planPrompt(config, history, editableBefore)), Plan);
+      const plan = lastJson(runStep(config, folder, "plan", planPrompt(config, history, editableBefore), entry), Plan);
       Object.assign(entry, plan, { focus: plan.focus.filter((f) => DIMENSION_NAMES.includes(f)) });
       if (entry.focus!.length === 0) throw new Error("Plan names no known focus dimension");
       if (plan.edits.length === 0) throw new Error("Plan names no edits");
@@ -182,7 +202,7 @@ new Command()
         .split("\n")
         .filter((line) => line !== "" && !holdout.includes(line.slice(3)));
       if (planChanged.length > 0) throw new Error(`plan step changed files: ${planChanged.join(", ")}`);
-      runStep(config, folder, "implement", implementPrompt(plan, editableBefore));
+      runStep(config, folder, "implement", implementPrompt(plan, editableBefore), entry);
       if (holdout.length > 0) git(config.worktree, "checkout", "HEAD", "--", ...holdout);
 
       git(config.worktree, "add", "-A");
@@ -235,7 +255,7 @@ new Command()
     if (entry.outcome === "keep" || entry.outcome === "discard" || entry.outcome === "gated") {
       try {
         const patch = readFileSync(entry.patch!, "utf8");
-        entry.learning = lastJson(runStep(config, folder, "learn", learnPrompt(entry, deltas, patch)), Learning).learning;
+        entry.learning = lastJson(runStep(config, folder, "learn", learnPrompt(entry, deltas, patch), entry), Learning).learning;
       } catch (error) {
         entry.decision = [...(entry.decision ?? []), `learn step failed: ${(error as Error).message}`];
       }

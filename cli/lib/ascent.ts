@@ -49,6 +49,16 @@ export const AscentDefaults = AscentConfig.omit({
   baseCommit: true
 });
 
+/** What one agent step used. Cost is the agent CLI estimate at list price, when it reports one. */
+const StepUsage = z.strictObject({
+  model: z.string().min(1),
+  durationMs: z.int().nonnegative(),
+  costUsd: z.number().nonnegative().optional(),
+  turns: z.int().nonnegative().optional()
+});
+
+export type StepUsage = z.infer<typeof StepUsage>;
+
 export const Outcome = z.enum(["baseline", "keep", "discard", "gated", "rejected", "no-change", "error"]);
 
 export type Outcome = z.infer<typeof Outcome>;
@@ -69,7 +79,8 @@ export const HistoryEntry = z.strictObject({
   commit: z.string().optional(),
   patch: z.string().optional(),
   patchHash: z.string().optional(),
-  run: z.string().optional()
+  run: z.string().optional(),
+  steps: z.strictObject({ plan: StepUsage.optional(), implement: StepUsage.optional(), learn: StepUsage.optional() }).optional()
 });
 
 export type HistoryEntry = z.infer<typeof HistoryEntry>;
