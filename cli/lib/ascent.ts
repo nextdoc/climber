@@ -2,12 +2,15 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import { DIMENSION_NAMES, scoreRun, type ScoreResult } from "./scoring.ts";
+import { DIMENSION_NAMES, scoreRun, weightOf, type ScoreResult } from "./scoring.ts";
 
 const Dimension = z.enum(DIMENSION_NAMES as [string, ...string[]]);
 
 /** One number for every dimension, keyed by dimension name. */
 const ByDimension = z.record(Dimension, z.number());
+
+/** A number for some dimensions. Scores only hold enabled dimensions. */
+const SomeDimensions = z.partialRecord(Dimension, z.number());
 
 /** An agent CLI invocation. The command reads the prompt on stdin, runs in the worktree, and gets the model as $MODEL. */
 const Step = z.strictObject({
@@ -34,7 +37,8 @@ export const AscentConfig = z.strictObject({
     .refine((t) => !t.holdout.some((c) => t.sample.includes(c)), "A test class cannot be in both sample and holdout"),
   steps: z.strictObject({ plan: Step, implement: Step, learn: Step, retro: Step.optional() }),
   maxDiscards: z.int().positive(),
-  margins: ByDimension
+  margins: ByDimension,
+  weights: z.partialRecord(Dimension, z.number().nonnegative()).default({})
 });
 
 export type AscentConfig = z.infer<typeof AscentConfig>;
@@ -74,7 +78,7 @@ export const HistoryEntry = z.strictObject({
   edits: z.array(z.string()).optional(),
   decision: z.array(z.string()).optional(),
   learning: z.string().optional(),
-  scores: ByDimension.optional(),
+  scores: SomeDimensions.optional(),
   overall: z.number().optional(),
   commit: z.string().optional(),
   patch: z.string().optional(),
@@ -177,10 +181,16 @@ export function formatApp(config: AscentConfig) {
 export function collectAndScore(config: AscentConfig, folder: string): ScoreResult {
   const prepare = join(REPO_ROOT, "cli/score-prepare.sh");
   const classes = [...config.testClasses.sample, ...config.testClasses.holdout].join(",");
-  const result = run(prepare, [config.targetOrg, folder, classes], config.worktree);
+  const off = (...names: string[]) => (names.every((n) => weightOf(config.weights, n) === 0) ? "1" : "");
+  const result = run(prepare, [config.targetOrg, folder, classes], config.worktree, undefined, {
+    SKIP_PMD: off("PMD"),
+    SKIP_SFGE: off("Graph Engine"),
+    SKIP_TESTS: off("Tests passing", "Code coverage", "Test run time", "Limit headroom", "Resource efficiency"),
+    SKIP_LOGS: off("Limit headroom", "Resource efficiency")
+  });
   writeFileSync(join(folder, "prepare.log"), result.stdout + result.stderr);
   if (result.status !== 0) throw new Error(`score-prepare failed, see ${join(folder, "prepare.log")}`);
-  return scoreRun({ app: config.app, test: config.test, run: folder, root: config.worktree });
+  return scoreRun({ app: config.app, test: config.test, run: folder, root: config.worktree, weights: config.weights });
 }
 
 export function scoresByName(result: ScoreResult): Record<string, number> {
@@ -222,7 +232,7 @@ export function decide(
   if (candidate.gated) return { outcome: "gated", reasons: [`gated by ${candidate.gate}`] };
   const scores = scoresByName(candidate);
   const reasons: string[] = [];
-  for (const name of DIMENSION_NAMES) {
+  for (const name of DIMENSION_NAMES.filter((d) => d in scores)) {
     const delta = scores[name] - current[name];
     const margin = margins[name] ?? 0;
     if (focus.includes(name) && !(delta > margin)) {

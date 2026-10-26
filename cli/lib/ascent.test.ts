@@ -37,6 +37,12 @@ describe("decide", () => {
     expect(result.reasons[0]).toContain("below half its best");
   });
 
+  test("ignores a disabled dimension missing from the candidate", () => {
+    const result = candidate({ PMD: 52 });
+    result.dimensions = result.dimensions!.filter((d) => d.name !== "Graph Engine");
+    expect(decide(baseline, { ...baseline, "Graph Engine": 100 }, result, ["PMD"], margins).outcome).toBe("keep");
+  });
+
   test("reports a gated candidate", () => {
     expect(decide(baseline, baseline, { gated: true, gate: "compile", overall: 0 }, ["PMD"], margins).outcome).toBe("gated");
   });
@@ -58,9 +64,9 @@ describe("HistoryEntry", () => {
     expect(HistoryEntry.safeParse({ ...entry, scores: baseline }).success).toBe(true);
   });
 
-  test("rejects scores missing a dimension", () => {
+  test("accepts scores missing a disabled dimension", () => {
     const { PMD, ...rest } = baseline;
-    expect(HistoryEntry.safeParse({ ...entry, scores: rest }).success).toBe(false);
+    expect(HistoryEntry.safeParse({ ...entry, scores: rest }).success).toBe(true);
   });
 
   test("rejects an unknown focus dimension", () => {

@@ -31,6 +31,15 @@
     }
   },
   "maxDiscards": 5,
+  "weights": {
+    "PMD": 1,
+    "Graph Engine": 1,
+    "Tests passing": 1,
+    "Code coverage": 1,
+    "Test run time": 1,
+    "Limit headroom": 1,
+    "Resource efficiency": 1
+  },
   "margins": {
     "PMD": 0.5,
     "Graph Engine": 0.5,

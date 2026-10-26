@@ -1,4 +1,4 @@
-import { globSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 type Violation = {
@@ -19,7 +19,10 @@ type TestSummary = {
 
 type ClassCoverage = { name: string; totalLines: number; totalCovered: number };
 
-export type ScoreOptions = { app: string[]; test: string[]; run: string; root: string };
+/** Weight per dimension. A missing dimension weighs 1, and 0 disables it and skips its tool. */
+export type Weights = Partial<Record<string, number>>;
+
+export type ScoreOptions = { app: string[]; test: string[]; run: string; root: string; weights?: Weights };
 
 export type DimensionScore = { name: string; weight: number; score: number; [detail: string]: unknown };
 
@@ -37,6 +40,10 @@ export const DETERMINISTIC: Record<string, boolean> = {
 };
 
 export const DIMENSION_NAMES = Object.keys(DETERMINISTIC);
+
+export const weightOf = (weights: Weights | undefined, name: string) => weights?.[name] ?? 1;
+
+export const enabledDimensions = (weights: Weights | undefined) => DIMENSION_NAMES.filter((d) => weightOf(weights, d) > 0);
 
 const SEVERITY_WEIGHTS: Record<number, number> = { 1: 16, 2: 8, 3: 4, 4: 2, 5: 1 };
 
@@ -74,7 +81,9 @@ function appViolations(file: string, files: Set<string>, root: string): Violatio
 /** One line per static analysis violation in application files, for the planner. */
 export function findings(opts: ScoreOptions): string[] {
   const files = appFiles(opts);
-  return ["pmd.json", "sfge.json"].flatMap((f) =>
+  return ["pmd.json", "sfge.json"]
+    .filter((f) => existsSync(join(opts.run, f)))
+    .flatMap((f) =>
     appViolations(join(opts.run, f), files, opts.root).map((v) => {
       const location = v.locations[v.primaryLocationIndex];
       return `${v.engine} ${v.rule} (severity ${v.severity}) ${location.file.split("/").pop()}:${location.startLine}: ${v.message}`;
@@ -181,20 +190,24 @@ export function scoreRun(opts: ScoreOptions): ScoreResult {
   if (deploy.result?.success !== true) {
     return { gated: true, gate: "compile", overall: 0 };
   }
+  const enabled = enabledDimensions(opts.weights);
+  if (enabled.length === 0) throw new Error("Every dimension has weight 0");
   const files = appFiles(opts);
-  const tests = readJson(join(opts.run, "tests.json")).result;
-  const summary: TestSummary = tests.summary;
-  const logsDir = join(opts.run, "logs");
-  const limits = testLimits(readdirSync(logsDir).map((f) => readFileSync(join(logsDir, f), "utf8")).join("\n"));
-  const dimensions = [
-    scoreViolations("PMD", join(opts.run, "pmd.json"), files, opts.root),
-    scoreViolations("Graph Engine", join(opts.run, "sfge.json"), files, opts.root),
-    scoreTestsPassing(summary),
-    scoreCoverage(tests.coverage?.coverage ?? [], files),
-    scoreTestRunTime(summary),
-    scoreHeadroom(limits),
-    scoreEfficiency(limits)
-  ];
+  const tests = () => readJson(join(opts.run, "tests.json")).result;
+  const limits = () => {
+    const logsDir = join(opts.run, "logs");
+    return testLimits(readdirSync(logsDir).map((f) => readFileSync(join(logsDir, f), "utf8")).join("\n"));
+  };
+  const scorers: Record<string, () => DimensionScore> = {
+    PMD: () => scoreViolations("PMD", join(opts.run, "pmd.json"), files, opts.root),
+    "Graph Engine": () => scoreViolations("Graph Engine", join(opts.run, "sfge.json"), files, opts.root),
+    "Tests passing": () => scoreTestsPassing(tests().summary),
+    "Code coverage": () => scoreCoverage(tests().coverage?.coverage ?? [], files),
+    "Test run time": () => scoreTestRunTime(tests().summary),
+    "Limit headroom": () => scoreHeadroom(limits()),
+    "Resource efficiency": () => scoreEfficiency(limits())
+  };
+  const dimensions = enabled.map((name) => ({ ...scorers[name](), weight: weightOf(opts.weights, name) }));
   const totalWeight = dimensions.reduce((sum, d) => sum + d.weight, 0);
   const overall = dimensions.reduce((sum, d) => sum + d.weight * d.score, 0) / totalWeight;
   return {

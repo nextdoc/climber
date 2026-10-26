@@ -27,7 +27,7 @@ import {
   type Step
 } from "./lib/ascent.ts";
 import { writeReport } from "./lib/report.ts";
-import { DIMENSION_NAMES, findings, scoreRun } from "./lib/scoring.ts";
+import { enabledDimensions, findings, scoreRun } from "./lib/scoring.ts";
 
 type Options = { dryRun: boolean };
 
@@ -50,7 +50,7 @@ function summariseHistory(history: HistoryEntry[]): string {
 
 function planPrompt(config: AscentConfig, history: HistoryEntry[], editable: Set<string>): string {
   const current = kept(history).at(-1)!;
-  const options = { app: config.app, test: config.test, run: current.run!, root: config.worktree };
+  const options = { app: config.app, test: config.test, run: current.run!, root: config.worktree, weights: config.weights };
   return `You are the plan step of one iteration of an ascent that improves Salesforce Apex code by hill climbing.
 
 Plan one candidate: 1 to 6 related edits aimed at one weakness. Read the code, but do not edit any file.
@@ -58,7 +58,7 @@ A separate implement step will make your edits, in only these files:
 ${[...editable].filter((f) => f.endsWith(".cls")).join("\n")}
 Tests and fixtures cannot change. The tests define the required behaviour, so the change must keep every test passing.
 
-Dimensions, each scored 0 to 100 (higher is better): ${DIMENSION_NAMES.join(", ")}.
+Dimensions, each scored 0 to 100 (higher is better): ${enabledDimensions(config.weights).join(", ")}.
 A candidate is kept when every focus dimension rises by more than its margin and no other dimension falls by more than its margin.
 Margins: ${JSON.stringify(config.margins)}
 
@@ -175,7 +175,7 @@ new Command()
     try {
       for (const file of holdout) rmSync(join(config.worktree, file));
       const plan = lastJson(runStep(config, folder, "plan", planPrompt(config, history, editableBefore), entry), Plan);
-      Object.assign(entry, plan, { focus: plan.focus.filter((f) => DIMENSION_NAMES.includes(f)) });
+      Object.assign(entry, plan, { focus: plan.focus.filter((f) => enabledDimensions(config.weights).includes(f)) });
       if (entry.focus!.length === 0) throw new Error("Plan names no known focus dimension");
       if (plan.edits.length === 0) throw new Error("Plan names no edits");
       const planChanged = git(config.worktree, "status", "--porcelain")
@@ -231,7 +231,7 @@ new Command()
 
     const previous = kept(history).at(-1)!.scores!;
     const deltas = entry.scores
-      ? Object.fromEntries(DIMENSION_NAMES.map((d) => [d, Number((entry.scores![d] - previous[d]).toFixed(1))]))
+      ? Object.fromEntries(Object.entries(entry.scores).map(([d, score]) => [d, Number((score! - previous[d]!).toFixed(1))]))
       : undefined;
     if (entry.outcome === "keep" || entry.outcome === "discard" || entry.outcome === "gated") {
       try {

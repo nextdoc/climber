@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Collects the raw inputs for cli/score.ts into one output directory.
+# SKIP_PMD, SKIP_SFGE, SKIP_TESTS and SKIP_LOGS set to 1 skip the inputs of dimensions with weight 0.
 set -uo pipefail
 
 [ $# -eq 3 ] || { echo "Usage: $0 <target-org alias or username> <run folder> <comma-separated test classes>" >&2; exit 1; }
@@ -20,32 +21,36 @@ sf project deploy start -o "$ORG" --source-dir force-app --ignore-conflicts --js
 jq -e '.result.success != null' "$OUT/deploy.json" > /dev/null || { jq -r '.message' "$OUT/deploy.json" >&2; exit 1; }
 [ "$(jq -r '.result.success' "$OUT/deploy.json")" = "true" ] || exit 0
 
-sf code-analyzer run --rule-selector pmd --target force-app --output-file "$OUT/pmd.json" || exit 1
-sf code-analyzer run --rule-selector sfge --workspace force-app --output-file "$OUT/sfge.json" || exit 1
+[ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run --rule-selector pmd --target force-app --output-file "$OUT/pmd.json" || exit 1
+[ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run --rule-selector sfge --workspace force-app --output-file "$OUT/sfge.json" || exit 1
+[ "${SKIP_TESTS:-}" = 1 ] && exit 0
 
 # Logs only profiling, which holds the TESTING_LIMITS blocks the scorer reads.
-DEBUG_LEVEL_ID=$(tooling_query "SELECT Id FROM DebugLevel WHERE DeveloperName = '$DEBUG_LEVEL'")
-if [ -z "$DEBUG_LEVEL_ID" ]; then
-  DEBUG_LEVEL_ID=$(sf data create record -o "$ORG" --use-tooling-api --json -s DebugLevel \
-    -v "DeveloperName=$DEBUG_LEVEL MasterLabel=$DEBUG_LEVEL ApexCode=ERROR ApexProfiling=INFO Database=NONE System=NONE Workflow=NONE Validation=NONE Callout=NONE Visualforce=NONE" \
-    | jq -r '.result.id')
-fi
-USERNAME=$(sf org display -o "$ORG" --json | jq -r '.result.username')
-USER_ID=$(sf data query -o "$ORG" --json -q "SELECT Id FROM User WHERE Username = '$USERNAME'" | jq -r '.result.records[0].Id')
 START=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-END=$(date -u -v+1H +%Y-%m-%dT%H:%M:%S.000Z)
-TRACE_FLAG_ID=$(tooling_query "SELECT Id FROM TraceFlag WHERE DebugLevelId = '$DEBUG_LEVEL_ID' AND TracedEntityId = '$USER_ID'")
-if [ -z "$TRACE_FLAG_ID" ]; then
-  sf data create record -o "$ORG" --use-tooling-api --json -s TraceFlag \
-    -v "TracedEntityId=$USER_ID DebugLevelId=$DEBUG_LEVEL_ID LogType=USER_DEBUG StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
-else
-  sf data update record -o "$ORG" --use-tooling-api --json -s TraceFlag -i "$TRACE_FLAG_ID" \
-    -v "StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
+if [ "${SKIP_LOGS:-}" != 1 ]; then
+  DEBUG_LEVEL_ID=$(tooling_query "SELECT Id FROM DebugLevel WHERE DeveloperName = '$DEBUG_LEVEL'")
+  if [ -z "$DEBUG_LEVEL_ID" ]; then
+    DEBUG_LEVEL_ID=$(sf data create record -o "$ORG" --use-tooling-api --json -s DebugLevel \
+      -v "DeveloperName=$DEBUG_LEVEL MasterLabel=$DEBUG_LEVEL ApexCode=ERROR ApexProfiling=INFO Database=NONE System=NONE Workflow=NONE Validation=NONE Callout=NONE Visualforce=NONE" \
+      | jq -r '.result.id')
+  fi
+  USERNAME=$(sf org display -o "$ORG" --json | jq -r '.result.username')
+  USER_ID=$(sf data query -o "$ORG" --json -q "SELECT Id FROM User WHERE Username = '$USERNAME'" | jq -r '.result.records[0].Id')
+  END=$(date -u -v+1H +%Y-%m-%dT%H:%M:%S.000Z)
+  TRACE_FLAG_ID=$(tooling_query "SELECT Id FROM TraceFlag WHERE DebugLevelId = '$DEBUG_LEVEL_ID' AND TracedEntityId = '$USER_ID'")
+  if [ -z "$TRACE_FLAG_ID" ]; then
+    sf data create record -o "$ORG" --use-tooling-api --json -s TraceFlag \
+      -v "TracedEntityId=$USER_ID DebugLevelId=$DEBUG_LEVEL_ID LogType=USER_DEBUG StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
+  else
+    sf data update record -o "$ORG" --use-tooling-api --json -s TraceFlag -i "$TRACE_FLAG_ID" \
+      -v "StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
+  fi
 fi
 
 # Failing tests exit non-zero, but still write results that the scorer needs.
 sf apex run test -o "$ORG" -n "$TEST_CLASSES" --code-coverage --result-format json -w 10 > "$OUT/tests.json"
 jq -e '.result.summary' "$OUT/tests.json" > /dev/null || exit 1
+[ "${SKIP_LOGS:-}" = 1 ] && exit 0
 
 # The test log can appear a few seconds after the run finishes.
 for _ in 1 2 3 4 5 6; do

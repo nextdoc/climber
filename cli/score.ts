@@ -8,6 +8,7 @@ new Command()
   .requiredOption("-t, --test <globs...>", "test Apex file globs (removed from the application set)")
   .option("-r, --run <dir>", "run folder", "target/tmp/score")
   .option("--root <dir>", "project folder the globs and analyzer paths are relative to", ".")
+  .option("-w, --weights <json>", 'weight per dimension, 0 disables it, e.g. \'{"Graph Engine": 0}\'', JSON.parse, {})
   .action((opts: ScoreOptions) => {
     console.log(JSON.stringify(scoreRun(opts), null, 2));
   })

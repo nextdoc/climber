@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { ascentDir, kept, loadConfig, loadHistory, REPO_ROOT, type AscentConfig, type HistoryEntry } from "./ascent.ts";
-import { DIMENSION_NAMES } from "./scoring.ts";
 
 const TEMPLATE = join(REPO_ROOT, "cli/report.html");
 
@@ -39,7 +38,7 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
     .map((e) => {
       const scored = hasScores(e);
       const deltas = scored
-        ? Object.fromEntries(DIMENSION_NAMES.map((d) => [d, round(e.scores![d] - state[d], 1)]))
+        ? Object.fromEntries(Object.entries(e.scores!).map(([d, score]) => [d, round(score! - state[d]!, 1)]))
         : undefined;
       if (e.outcome === "keep" && !e.dryRun) {
         state = e.scores!;
@@ -111,11 +110,11 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
       byStep: Object.fromEntries(STEPS.map((s) => [s, round(totals[s])])),
       series
     },
-    dimensions: DIMENSION_NAMES.map((name) => ({
+    dimensions: Object.keys(baseline.scores).map((name) => ({
       name,
       baseline: baseline.scores![name],
-      current: state[name],
-      delta: round(state[name] - baseline.scores![name], 1),
+      current: state[name]!,
+      delta: round(state[name]! - baseline.scores![name]!, 1),
       margin: config.margins[name] ?? 0,
       series: kept(history).map((e) => e.scores![name])
     })),
