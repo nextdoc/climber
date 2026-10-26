@@ -2,18 +2,22 @@
 # Collects the raw inputs for cli/score.ts into one output directory.
 set -uo pipefail
 
-ORG=climb-your-apex
+[ $# -eq 3 ] || { echo "Usage: $0 <target-org alias or username> <run folder> <comma-separated test classes>" >&2; exit 1; }
+ORG=$1
+OUT=$2
+TEST_CLASSES=$3
 DEBUG_LEVEL=ClimbScore
-OUT=${1:-target/tmp/score}
 rm -rf "$OUT"
-mkdir -p "$OUT/logs"
+mkdir -p "$OUT/logs" target/tmp/code-analyzer/logs
 
 tooling_query() {
   sf data query -o "$ORG" --use-tooling-api --json -q "$1" | jq -r '.result.records[]?.Id'
 }
 
 # Compile gate: a failed deploy stops collection, and the scorer reports the gate from deploy.json.
-sf project deploy start -o "$ORG" --source-dir force-app --json > "$OUT/deploy.json"
+# Each worktree has its own source tracking, so org changes from other worktrees show as conflicts.
+sf project deploy start -o "$ORG" --source-dir force-app --ignore-conflicts --json > "$OUT/deploy.json"
+jq -e '.result.success != null' "$OUT/deploy.json" > /dev/null || { jq -r '.message' "$OUT/deploy.json" >&2; exit 1; }
 [ "$(jq -r '.result.success' "$OUT/deploy.json")" = "true" ] || exit 0
 
 sf code-analyzer run --rule-selector pmd --target force-app --output-file "$OUT/pmd.json" || exit 1
@@ -40,7 +44,7 @@ else
 fi
 
 # Failing tests exit non-zero, but still write results that the scorer needs.
-sf apex run test -o "$ORG" -n AccountHealthRollupTest --code-coverage --result-format json -w 10 > "$OUT/tests.json"
+sf apex run test -o "$ORG" -n "$TEST_CLASSES" --code-coverage --result-format json -w 10 > "$OUT/tests.json"
 jq -e '.result.summary' "$OUT/tests.json" > /dev/null || exit 1
 
 # The test log can appear a few seconds after the run finishes.
