@@ -32,6 +32,16 @@ private class AccountHealthRollupTest {
     }
 
     @isTest
+    static void rateAllFromFlow() {
+        Fixtures fixtures = new Fixtures();
+        fixtures.provision(50, 5, 10);
+        Test.startTest();
+        AccountHealthRollup.rateAll();
+        Test.stopTest();
+        System.assertEquals('Hot', fixtures.reload('hot').Rating, 'invocable rates accounts');
+    }
+
+    @isTest
     static void hotAccount() {
         Fixtures fixtures = provisionAndRun();
         System.assertEquals('Hot', fixtures.reload('hot').Rating, 'example 1');
@@ -95,6 +105,16 @@ private class AccountHealthRollupTest {
         Fixtures fixtures = provisionAndRun();
         System.assertEquals(fixtures.bulkAccounts.size(),
                 [SELECT COUNT() FROM Account WHERE Id IN :fixtures.bulkAccountIds() AND Rating = 'Warm'], 'bulk accounts are Warm');
+    }
+
+    @isTest
+    static void headroomAt200Accounts() {
+        Fixtures fixtures = new Fixtures();
+        fixtures.provision(194, 5, 10);
+        Test.startTest();
+        Integer accountsRated = new AccountHealthRollup().run();
+        Test.stopTest();
+        System.assertEquals(200, accountsRated, '194 bulk plus 6 scenario accounts make one batch of 200');
     }
 
     @isTest

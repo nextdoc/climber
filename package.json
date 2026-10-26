@@ -5,11 +5,17 @@
   "description": "Salesforce App",
   "scripts": {
     "prettier": "prettier --write \"**/*.{cls,json,md,trigger,xml,yaml,yml}\"",
-    "prettier:verify": "prettier --check \"**/*.{cls,json,md,trigger,xml,yaml,yml}\""
+    "prettier:verify": "prettier --check \"**/*.{cls,json,md,trigger,xml,yaml,yml}\"",
+    "score": "bun cli/score.ts -a 'force-app/**/classes/*.cls' -t 'force-app/**/classes/*Test.cls' 'force-app/**/classes/Fixtures.cls'",
+    "score:prepare": "cli/score-prepare.sh"
   },
   "devDependencies": {
     "@prettier/plugin-xml": "3.4.2",
     "prettier": "3.9.10",
     "prettier-plugin-apex": "2.3.0"
-  }
+  },
+  "dependencies": {
+    "commander": "15.0.0"
+  },
+  "type": "module"
 }

@@ -40,6 +40,15 @@ public class AccountHealthRollup {
     }
 
     /**
+     * @description Rates every account in the org. Invoked from a schedule-triggered Flow, which also gives
+     * Salesforce Graph Engine an entry point to analyse.
+     */
+    @InvocableMethod(label='Rate Account Health' description='Rates every account and creates follow-up tasks')
+    public static void rateAll() {
+        new AccountHealthRollup().run();
+    }
+
+    /**
      * @description Measures won revenue, open pipeline and last activity for each account, then rates it.
      * @param accounts the accounts to rate
      */
