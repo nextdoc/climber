@@ -48,3 +48,16 @@ $RECYCLE.BIN/
 **/venv/
 /climb-your-apex.iml
 /.idea/
+/.mcp.json
+/.claude/settings.local.json
+/doc/design.md
+
+# Added by Illuminated Cloud
+/IlluminatedCloud/
+/out/
+target/
+/.illuminatedCloud/
+**/tsconfig*.json
+**/*.tsbuildinfo
+**/graphql.config.yml
+/CLAUDE.md

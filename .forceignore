@@ -12,3 +12,11 @@ package.xml
 **/__tests__/**
 
 node_modules/
+
+# Added by Illuminated Cloud
+/.illuminatedCloud/
+**/*.ts
+**/tsconfig*.json
+**/*.tsbuildinfo
+**/eslint.config.mjs
+**/graphql.config.yml
