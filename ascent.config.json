@@ -24,6 +24,10 @@
     "learn": {
       "model": "claude-sonnet-5-5",
       "command": "claude -p --output-format json --model \"$MODEL\" --tools \"\""
+    },
+    "retro": {
+      "model": "claude-opus-5-5",
+      "command": "claude -p --output-format json --model \"$MODEL\" --allowedTools Read,Glob,Grep"
     }
   },
   "maxDiscards": 5,

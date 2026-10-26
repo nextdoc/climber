@@ -7,6 +7,7 @@ import {
   appendHistory,
   ascentDir,
   bestScores,
+  ClaudeResult,
   classFiles,
   collectAndScore,
   consecutiveDiscards,
@@ -15,6 +16,7 @@ import {
   formatApp,
   git,
   kept,
+  lastJson,
   loadConfig,
   loadHistory,
   run,
@@ -107,27 +109,10 @@ End your reply with one JSON object and nothing after it:
 `;
 }
 
-/** Parses the last JSON object in an agent's reply that matches the schema. */
-function lastJson<T>(output: string, schema: z.ZodType<T>): T {
-  for (let i = output.lastIndexOf("{"); i >= 0; i = output.lastIndexOf("{", i - 1)) {
-    try {
-      const parsed = schema.safeParse(JSON.parse(output.slice(i, output.lastIndexOf("}") + 1)));
-      if (parsed.success) return parsed.data;
-    } catch {
-      // Not a complete JSON object yet; widen to the previous brace.
-    }
-    if (i === 0) break;
-  }
-  throw new Error("Agent reply has no matching JSON object");
-}
-
-/** The JSON a `claude -p --output-format json` step prints. */
-const ClaudeResult = z.object({ result: z.string(), total_cost_usd: z.number(), num_turns: z.int() });
-
 function runStep(
   config: AscentConfig,
   folder: string,
-  name: keyof AscentConfig["steps"],
+  name: "plan" | "implement" | "learn",
   prompt: string,
   entry: HistoryEntry
 ): string {

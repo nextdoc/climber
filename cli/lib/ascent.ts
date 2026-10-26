@@ -32,7 +32,7 @@ export const AscentConfig = z.strictObject({
       holdout: z.array(z.string().min(1))
     })
     .refine((t) => !t.holdout.some((c) => t.sample.includes(c)), "A test class cannot be in both sample and holdout"),
-  steps: z.strictObject({ plan: Step, implement: Step, learn: Step }),
+  steps: z.strictObject({ plan: Step, implement: Step, learn: Step, retro: Step.optional() }),
   maxDiscards: z.int().positive(),
   margins: ByDimension
 });
@@ -136,6 +136,25 @@ export function git(cwd: string, ...args: string[]): string {
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr.trim()}`);
   return result.stdout.trim();
 }
+
+/** Parses the last JSON object in an agent's reply that matches the schema. */
+export function lastJson<T>(output: string, schema: z.ZodType<T>): T {
+  for (let i = output.lastIndexOf("{"); i >= 0; i = output.lastIndexOf("{", i - 1)) {
+    try {
+      const parsed = schema.safeParse(JSON.parse(output.slice(i, output.lastIndexOf("}") + 1)));
+      if (parsed.success) return parsed.data;
+    } catch {
+      // Not a complete JSON object yet; widen to the previous brace.
+    }
+    if (i === 0) break;
+  }
+  throw new Error("Agent reply has no matching JSON object");
+}
+
+/** The JSON a `claude -p --output-format json` step prints. */
+export const ClaudeResult = z.object({ result: z.string(), total_cost_usd: z.number(), num_turns: z.int() });
+
+export type ClaudeResult = z.infer<typeof ClaudeResult>;
 
 /** Application files and their metadata, relative to the worktree. */
 export function editableFiles(config: AscentConfig): Set<string> {

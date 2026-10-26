@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { ascentDir, kept, loadConfig, loadHistory, REPO_ROOT, type AscentConfig, type HistoryEntry } from "./ascent.ts";
 import { DIMENSION_NAMES } from "./scoring.ts";
@@ -119,7 +119,8 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
       margin: config.margins[name] ?? 0,
       series: kept(history).map((e) => e.scores![name])
     })),
-    rows
+    rows,
+    retro: existsSync(join(dir, "retro.json")) ? JSON.parse(readFileSync(join(dir, "retro.json"), "utf8")) : null
   };
 }
 

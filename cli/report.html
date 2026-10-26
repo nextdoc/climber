@@ -57,6 +57,12 @@ a{color:var(--keep)}
 <div class="scroll"><table id="iterations"></table></div>
 <h2 id="cost-title">Cumulative agent cost by step</h2>
 <div class="chart" id="cost"></div>
+<section id="retro" hidden>
+<h2>Retrospective (first pass, agent generated)</h2>
+<p class="meta" id="retro-meta"></p>
+<p id="retro-summary"></p>
+<div class="scroll"><table id="retro-items"></table></div>
+</section>
 </main>
 <script>
 const data = /*DATA*/null;
@@ -224,6 +230,29 @@ document.getElementById('iterations').innerHTML = `
     <td>${deltas(r)}</td>
     <td class="notes">${note('Reason', r.reason)}${note('Decision', r.decision.join('; '))}${note('Learning', r.learning)}</td>
     <td>${link('patch', r.patch)}${link('run', r.run)}</td></tr>`).join('')}`;
+
+if (data.retro) {
+  const r = data.retro;
+  document.getElementById('retro').hidden = false;
+  document.getElementById('retro-meta').innerHTML = [
+    ['Commits', `<code>${esc(r.base.slice(0, 8))}..${esc(r.head.slice(0, 8))}</code>`], ['Written', esc(when(r.at))],
+    ['Tests changed', esc(r.changedTests.join(', ') || 'none')]
+  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+  document.getElementById('retro-summary').textContent = r.summary;
+  const tone = {high: '--rejected', medium: '--gated', low: '--discard', good: '--keep', questionable: '--gated', bad: '--rejected'};
+  const pill = v => `<span class="pill" style="background:${css(tone[v])}">${esc(v)}</span>`;
+  const groups = [
+    ['Behaviour changes', r.behaviourChanges, i => `${pill(i.severity)}<div class="focus" style="margin-top:6px">${i.caughtByTests ? 'caught by tests' : 'not caught by tests'}</div>`,
+      i => note('Evidence', i.evidence) + note('Iterations', i.iterations.join(', ')) + note('Proposed test', i.proposedTest)],
+    ['Patterns', r.patterns, i => pill(i.verdict), i => note('Evidence', i.evidence)],
+    ['Test gaps', r.testGaps, () => '', i => note('Proposed test', i.proposedTest)],
+    ['Other', r.other, () => '', () => '']];
+  document.getElementById('retro-items').innerHTML = `
+    <tr><th>Code</th><th>Kind</th><th>Finding</th></tr>
+    ${groups.flatMap(([kind, items, badge, extra]) => items.map(i => `<tr>
+      <td><b>${esc(i.code)}</b></td><td>${kind}${badge(i) ? `<div style="margin-top:4px">${badge(i)}</div>` : ''}</td>
+      <td class="notes"><p><b>${esc(i.title)}</b></p><p>${esc(i.detail)}</p>${extra(i)}</td></tr>`)).join('')}`;
+}
 </script>
 </body>
 </html>
