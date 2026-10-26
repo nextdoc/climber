@@ -105,11 +105,10 @@ const ring = (() => {
     <circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--keep)" stroke-width="6" stroke-linecap="round"
       stroke-dasharray="${share * c} ${c}" transform="rotate(-90 28 28)"/>
     <text x="28" y="32" font-size="12" font-weight="600" text-anchor="middle" fill="var(--text)">${Math.round(share * 100)}%</text></svg>`;})();
-const gainPct = s.baseline ? s.gain / s.baseline * 100 : 0;
 document.getElementById('tiles').innerHTML = `
   <div class="card">${scoreBar}<div>
     <div class="label">${icons.target} Gain on baseline</div>
-    <div class="big">${signed(gainPct)}%</div>
+    <div class="big">${signed(s.gain)} <span style="font-size:16px;color:var(--muted)">pts</span></div>
     <div class="row">${s.gain >= 0 ? icons.up : icons.down}Current <b>${f(s.current)}</b> from ${f(s.baseline)} baseline</div></div></div>
   <div class="card">${gauge}<div>
     <div class="label">${icons.trend} Climb angle</div>
@@ -135,12 +134,17 @@ const tip = [{field: 'iteration', title: 'Iteration'}, {field: 'outcome', title:
   {field: 'hours', title: 'Hours', format: '.2f'}, {field: 'minutes', title: 'Minutes', format: '.1f'},
   {field: 'focusText', title: 'Focus'}, {field: 'reason', title: 'Reason'}];
 const withFocus = rows => rows.map(r => ({...r, focusText: r.focus.join(', ')}));
-const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Hours since baseline', scale: {domainMin: 0}};
+const lastHours = Math.max(s.hours, ...climb.map(r => r.hours));
+const fiveMinutes = Array.from({length: Math.ceil(lastHours * 12) + 1}, (_, i) => i / 12);
+const minutes = 'round(datum.value * 60)';
+const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Time since baseline (h:mm)',
+  scale: {domain: [0, fiveMinutes.at(-1)], nice: false},
+  axis: {values: fiveMinutes, labelExpr: `${minutes} % 15 ? '' : floor(${minutes} / 60) + ':' + pad(${minutes} % 60, 2, '0', 'left')`}};
 vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
   vconcat: [
     {width: 'container', height: 320, layer: [
       {data: {values: steps}, mark: {type: 'line', interpolate: 'step-after', strokeWidth: 2, color: css('--keep')},
-       encoding: {x: {...hoursAxis, axis: {title: null, labels: false}}, y: {field: 'current', type: 'quantitative', title: 'Overall score', scale: {zero: false}}}},
+       encoding: {x: {...hoursAxis, axis: {...hoursAxis.axis, title: null, labels: false}}, y: {field: 'current', type: 'quantitative', title: 'Overall score', scale: {zero: false}}}},
       {data: {values: s.fit}, mark: {type: 'line', strokeDash: [6, 4], strokeWidth: 2, color: css('--muted')},
        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'fit', type: 'quantitative'}}},
       {data: {values: withFocus(scored)}, mark: {type: 'point', size: 90, strokeWidth: 2, opacity: 1},
@@ -154,7 +158,7 @@ vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', 
   ], resolve: {scale: {x: 'shared'}}}, {actions: false});
 vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', width: 'container', height: 200, config,
   data: {values: withFocus(climb.filter(r => r.minutes != null))},
-  mark: {type: 'bar', cornerRadiusTopLeft: 4, cornerRadiusTopRight: 4},
+  mark: {type: 'bar', cornerRadiusTopLeft: 4, cornerRadiusTopRight: 4, width: {expr: "min(40, bandwidth('x') * 0.8)"}},
   encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration'},
              y: {field: 'minutes', type: 'quantitative', title: 'Minutes'},
              color: outcome, tooltip: tip}}, {actions: false});
