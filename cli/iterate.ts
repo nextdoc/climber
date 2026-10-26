@@ -135,6 +135,19 @@ function runStep(config: AscentConfig, folder: string, name: keyof AscentConfig[
   return result.stdout;
 }
 
+/** Appends the entry, or when it fails validation, a minimal error entry, keeping the full entry in the run folder. */
+function record(name: string, folder: string, entry: HistoryEntry) {
+  try {
+    appendHistory(name, entry);
+  } catch (error) {
+    writeFileSync(join(folder, "entry.json"), JSON.stringify(entry, null, 2));
+    const { iteration, at, finishedAt, dryRun, reason, patch, patchHash } = entry;
+    const decision = [`history entry invalid, see ${join(folder, "entry.json")}: ${(error as Error).message}`];
+    Object.assign(entry, { outcome: "error", decision });
+    appendHistory(name, { iteration, at, finishedAt, outcome: "error", dryRun, reason, patch, patchHash, run: folder, decision });
+  }
+}
+
 function restore(worktree: string) {
   git(worktree, "reset", "--hard", "HEAD");
   git(worktree, "clean", "-fd");
@@ -197,7 +210,7 @@ new Command()
           const current = kept(history).at(-1)!.scores!;
           const decision = decide(current, bestScores(history), result, entry.focus, config.margins);
           Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
-          entry.scores = scoresByName(result);
+          if (result.dimensions) entry.scores = scoresByName(result);
           entry.overall = result.overall;
         }
       }
@@ -211,6 +224,7 @@ new Command()
     } catch (error) {
       entry.outcome = "error";
       entry.decision = [(error as Error).message];
+      writeFileSync(join(folder, "error.txt"), (error as Error).stack ?? String(error));
       restore(config.worktree);
     }
 
@@ -228,8 +242,12 @@ new Command()
     }
 
     entry.finishedAt = new Date().toISOString();
-    appendHistory(name, entry);
-    writeReport(name);
+    record(name, folder, entry);
+    try {
+      writeReport(name);
+    } catch (error) {
+      console.error(`report not written: ${(error as Error).message}`);
+    }
     const all = [...history, entry];
     const discards = consecutiveDiscards(all);
     console.log(
