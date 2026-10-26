@@ -1,0 +1,252 @@
+import { createHash } from "node:crypto";
+import { globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { Command } from "commander";
+import { z } from "zod";
+import {
+  appendHistory,
+  ascentDir,
+  bestScores,
+  classFiles,
+  collectAndScore,
+  consecutiveDiscards,
+  decide,
+  git,
+  kept,
+  loadConfig,
+  loadHistory,
+  run,
+  runDir,
+  scoresByName,
+  type AscentConfig,
+  type HistoryEntry,
+  type Step
+} from "./lib/ascent.ts";
+import { DIMENSION_NAMES, findings, scoreRun } from "./lib/scoring.ts";
+
+type Options = { dryRun: boolean };
+
+const Plan = z.object({ reason: z.string().min(1), focus: z.array(z.string()), edits: z.array(z.string()).default([]) });
+
+const Learning = z.object({ learning: z.string().min(1) });
+
+function editableFiles(config: AscentConfig): Set<string> {
+  const glob = (patterns: string[]) => new Set(patterns.flatMap((p) => globSync(p, { cwd: config.worktree })));
+  const tests = glob(config.test).union(new Set(classFiles(config.worktree, config.testClasses.holdout)));
+  const apps = [...glob(config.app)].filter((f) => !tests.has(f));
+  return new Set(apps.flatMap((f) => [f, `${f}-meta.xml`]));
+}
+
+function summariseHistory(history: HistoryEntry[]): string {
+  return history
+    .filter((e) => !e.dryRun)
+    .slice(-10)
+    .map((e) => {
+      const plan = e.focus ? ` focus=${e.focus.join(", ")}: ${e.reason}` : "";
+      const decision = e.decision ? ` (${e.decision.join("; ")})` : "";
+      const learning = e.learning ? `\n  learning: ${e.learning}` : "";
+      return `#${e.iteration} ${e.outcome} overall=${e.overall ?? "-"}${plan}${decision}${learning}`;
+    })
+    .join("\n");
+}
+
+function planPrompt(config: AscentConfig, history: HistoryEntry[], editable: Set<string>): string {
+  const current = kept(history).at(-1)!;
+  const options = { app: config.app, test: config.test, run: current.run!, root: config.worktree };
+  return `You are the plan step of one iteration of an ascent that improves Salesforce Apex code by hill climbing.
+
+Plan one candidate: 1 to 6 related edits aimed at one weakness. Read the code, but do not edit any file.
+A separate implement step will make your edits, in only these files:
+${[...editable].filter((f) => f.endsWith(".cls")).join("\n")}
+Tests and fixtures cannot change. The tests define the required behaviour, so the change must keep every test passing.
+
+Dimensions, each scored 0 to 100 (higher is better): ${DIMENSION_NAMES.join(", ")}.
+A candidate is kept when every focus dimension rises by more than its margin and no other dimension falls by more than its margin.
+Margins: ${JSON.stringify(config.margins)}
+
+Current scores and details:
+${JSON.stringify(scoreRun(options).dimensions, null, 1)}
+
+Static analysis findings in application files:
+${findings(options).join("\n")}
+
+Recent iterations and their learnings (do not repeat a discarded change):
+${summariseHistory(history)}
+
+End your reply with one JSON object and nothing after it. Write each edit precisely enough to implement without your reasoning:
+{"reason": "the weakness and why this fixes it", "focus": ["dimension names this should raise"], "edits": ["one line per edit"]}
+`;
+}
+
+function implementPrompt(plan: z.infer<typeof Plan>, editable: Set<string>): string {
+  return `You are the implement step of one iteration of an ascent that improves Salesforce Apex code by hill climbing.
+
+Make exactly these edits, and nothing else:
+${plan.edits.map((e) => `- ${e}`).join("\n")}
+
+Why: ${plan.reason}
+
+Edit only these files:
+${[...editable].filter((f) => f.endsWith(".cls")).join("\n")}
+Do not edit tests or fixtures, deploy, or run tests. The harness deploys, tests and scores your change.
+The tests define the required behaviour, so the change must keep every test passing.
+`;
+}
+
+function learnPrompt(entry: HistoryEntry, deltas: Record<string, number> | undefined, patch: string): string {
+  return `You are the learn step of one iteration of an ascent that improves Salesforce Apex code by hill climbing.
+Later plan steps read your learning before choosing their next candidate.
+
+Plan: ${JSON.stringify({ reason: entry.reason, focus: entry.focus, edits: entry.edits })}
+Outcome: ${entry.outcome}
+Decision: ${(entry.decision ?? []).join("; ")}
+Score changes against the current kept state: ${JSON.stringify(deltas ?? {})}
+
+Diff:
+${patch}
+
+Write one learning: what this result shows about which changes move which dimensions, and why. Do not restate the scores.
+End your reply with one JSON object and nothing after it:
+{"learning": "one or two sentences"}
+`;
+}
+
+/** Parses the last JSON object in an agent's reply that matches the schema. */
+function lastJson<T>(output: string, schema: z.ZodType<T>): T {
+  for (let i = output.lastIndexOf("{"); i >= 0; i = output.lastIndexOf("{", i - 1)) {
+    try {
+      const parsed = schema.safeParse(JSON.parse(output.slice(i, output.lastIndexOf("}") + 1)));
+      if (parsed.success) return parsed.data;
+    } catch {
+      // Not a complete JSON object yet; widen to the previous brace.
+    }
+    if (i === 0) break;
+  }
+  throw new Error("Agent reply has no matching JSON object");
+}
+
+function runStep(config: AscentConfig, folder: string, name: keyof AscentConfig["steps"], prompt: string): string {
+  const step: Step = config.steps[name];
+  writeFileSync(join(folder, `${name}-prompt.md`), prompt);
+  const result = run("sh", ["-c", step.command], config.worktree, prompt, { MODEL: step.model });
+  writeFileSync(join(folder, `${name}.txt`), result.stdout + result.stderr);
+  if (result.status !== 0) throw new Error(`${name} step exited ${result.status}, see ${join(folder, `${name}.txt`)}`);
+  return result.stdout;
+}
+
+function restore(worktree: string) {
+  git(worktree, "reset", "--hard", "HEAD");
+  git(worktree, "clean", "-fd");
+}
+
+new Command()
+  .name("iterate")
+  .description("Run one iteration of an ascent: plan, implement, score, keep or discard, then learn")
+  .argument("<name>", "ascent name")
+  .option("--dry-run", "run every step, then restore the worktree instead of committing", false)
+  .action((name: string, opts: Options) => {
+    const config = loadConfig(name);
+    const history = loadHistory(name);
+    const iteration = Math.max(...history.map((e) => e.iteration)) + 1;
+    const folder = runDir(name, iteration);
+    mkdirSync(folder, { recursive: true });
+    const entry: HistoryEntry = { iteration, at: new Date().toISOString(), outcome: "error", dryRun: opts.dryRun };
+
+    if (git(config.worktree, "status", "--porcelain") !== "") {
+      throw new Error(`Worktree ${config.worktree} is not clean; commit or restore it first`);
+    }
+    const editableBefore = editableFiles(config);
+    const holdout = classFiles(config.worktree, config.testClasses.holdout);
+
+    try {
+      for (const file of holdout) rmSync(join(config.worktree, file));
+      const plan = lastJson(runStep(config, folder, "plan", planPrompt(config, history, editableBefore)), Plan);
+      Object.assign(entry, plan, { focus: plan.focus.filter((f) => DIMENSION_NAMES.includes(f)) });
+      if (entry.focus!.length === 0) throw new Error("Plan names no known focus dimension");
+      if (plan.edits.length === 0) throw new Error("Plan names no edits");
+      const planChanged = git(config.worktree, "status", "--porcelain")
+        .split("\n")
+        .filter((line) => line !== "" && !holdout.includes(line.slice(3)));
+      if (planChanged.length > 0) throw new Error(`plan step changed files: ${planChanged.join(", ")}`);
+      runStep(config, folder, "implement", implementPrompt(plan, editableBefore));
+      if (holdout.length > 0) git(config.worktree, "checkout", "HEAD", "--", ...holdout);
+
+      git(config.worktree, "add", "-A");
+      const changed = git(config.worktree, "diff", "--cached", "--name-only").split("\n").filter(Boolean);
+      if (changed.length === 0) {
+        entry.outcome = "no-change";
+      } else {
+        const patch = git(config.worktree, "diff", "--cached", "--binary") + "\n";
+        entry.patch = join(ascentDir(name), "patches", `${iteration}.patch`);
+        entry.patchHash = createHash("sha256").update(patch).digest("hex");
+        mkdirSync(join(ascentDir(name), "patches"), { recursive: true });
+        writeFileSync(entry.patch, patch);
+
+        const editable = new Set([...editableBefore, ...editableFiles(config)]);
+        const forbidden = changed.filter((f) => !editable.has(f));
+        const discarded = history.filter((e) => !e.dryRun && e.outcome !== "keep" && e.outcome !== "baseline");
+        if (forbidden.length > 0) {
+          entry.outcome = "rejected";
+          entry.decision = [`edited files outside the application: ${forbidden.join(", ")}`];
+        } else if (discarded.some((e) => e.patchHash === entry.patchHash)) {
+          entry.outcome = "rejected";
+          entry.decision = ["repeats a discarded change"];
+        } else {
+          const result = collectAndScore(config, folder);
+          const current = kept(history).at(-1)!.scores!;
+          const decision = decide(current, bestScores(history), result, entry.focus, config.margins);
+          Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
+          entry.scores = scoresByName(result);
+          entry.overall = result.overall;
+        }
+      }
+
+      if (entry.outcome === "keep" && !opts.dryRun) {
+        git(config.worktree, "commit", "-q", "-m", `ASCENT ${name} #${iteration} ${entry.reason}`);
+        entry.commit = git(config.worktree, "rev-parse", "HEAD");
+      } else {
+        restore(config.worktree);
+      }
+    } catch (error) {
+      entry.outcome = "error";
+      entry.decision = [(error as Error).message];
+      restore(config.worktree);
+    }
+
+    const previous = kept(history).at(-1)!.scores!;
+    const deltas = entry.scores
+      ? Object.fromEntries(DIMENSION_NAMES.map((d) => [d, Number((entry.scores![d] - previous[d]).toFixed(1))]))
+      : undefined;
+    if (entry.outcome === "keep" || entry.outcome === "discard" || entry.outcome === "gated") {
+      try {
+        const patch = readFileSync(entry.patch!, "utf8");
+        entry.learning = lastJson(runStep(config, folder, "learn", learnPrompt(entry, deltas, patch)), Learning).learning;
+      } catch (error) {
+        entry.decision = [...(entry.decision ?? []), `learn step failed: ${(error as Error).message}`];
+      }
+    }
+
+    appendHistory(name, entry);
+    const all = [...history, entry];
+    const discards = consecutiveDiscards(all);
+    console.log(
+      JSON.stringify(
+        {
+          iteration,
+          dryRun: opts.dryRun,
+          outcome: entry.outcome,
+          focus: entry.focus,
+          reason: entry.reason,
+          decision: entry.decision,
+          learning: entry.learning,
+          overall: entry.overall,
+          deltas,
+          consecutiveDiscards: discards,
+          stop: discards >= config.maxDiscards
+        },
+        null,
+        2
+      )
+    );
+  })
+  .parse();

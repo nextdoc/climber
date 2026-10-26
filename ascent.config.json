@@ -1,0 +1,35 @@
+{
+  "app": ["force-app/**/classes/*.cls"],
+  "test": [
+    "force-app/**/classes/*Test.cls",
+    "force-app/**/classes/Fixtures.cls"
+  ],
+  "testClasses": {
+    "sample": ["AccountHealthRollupTest"],
+    "holdout": []
+  },
+  "steps": {
+    "plan": {
+      "model": "claude-opus-5-5",
+      "command": "claude -p --model \"$MODEL\" --allowedTools Read,Glob,Grep"
+    },
+    "implement": {
+      "model": "claude-sonnet-5-5",
+      "command": "claude -p --model \"$MODEL\" --permission-mode acceptEdits --allowedTools Read,Edit,Write,Glob,Grep"
+    },
+    "learn": {
+      "model": "claude-sonnet-5-5",
+      "command": "claude -p --model \"$MODEL\" --tools \"\""
+    }
+  },
+  "maxDiscards": 5,
+  "margins": {
+    "PMD": 0.5,
+    "Graph Engine": 0.5,
+    "Tests passing": 0,
+    "Code coverage": 0,
+    "Test run time": 3,
+    "Limit headroom": 3,
+    "Resource efficiency": 1
+  }
+}
