@@ -35,11 +35,12 @@ Source: `sf apex run test -n AccountHealthRollupTest --code-coverage --result-fo
 | Dimension | Formula | Baseline | Baseline score |
 |---|---|---|---|
 | Tests passing | `100 × passing / ran` | 13 of 13 pass | 100 |
+| Code coverage | `100 × covered lines / lines` over application classes | 76 of 76 lines | 100 |
 | Test run time | `100 × K / (K + P)`, `P` = seconds, `K` = 40 | 60.5 s | 39.8 |
 
 - Test run time reuses the half-score formula with seconds as the penalty. `K` = 40 s was the run time before the headroom test was added. The headroom test raised it to about 60 s.
 - Run time is noisy between runs (41 to 46 s before the headroom test). `K` and the keep margin should be set from repeated unchanged runs.
-- Coverage is recorded but not scored.
+- Code coverage counts only application classes, so `Fixtures.cls` is excluded. An application class that no test executes is absent from Salesforce's coverage results. It is listed under `notRun` but adds no lines, so dead code does not lower the score.
 
 ### Governor limits
 
@@ -82,6 +83,20 @@ Baseline score: 100 × 170 / (170 + 181.9) = 48.3.
 
 - CPU time is noisy (83.8 to 96.3 percent across runs). The other limits are counts and repeat exactly.
 
+## Determinism
+
+Every dimension is classified as deterministic or nondeterministic (`DETERMINISTIC` in `cli/lib/scoring.ts`). Margins are measured from repeated baseline runs only for nondeterministic dimensions.
+
+| Dimension | Deterministic | Why |
+|---|---|---|
+| PMD | Yes | Static analysis of the same code |
+| Graph Engine | Yes | Static analysis of the same code |
+| Tests passing | Yes | The same code passes the same tests |
+| Code coverage | Yes | The same tests execute the same lines |
+| Test run time | No | Wall-clock time on a shared org |
+| Limit headroom | No | Driven by CPU time, which varies between runs |
+| Resource efficiency | No | Counts repeat exactly, but CPU time varies |
+
 ## Overall score
 
 Weighted mean of the dimension scores, 0–100.
@@ -93,13 +108,14 @@ Weighted mean of the dimension scores, 0–100.
 | PMD | 1 |
 | Graph Engine | 1 |
 | Tests passing | 1 |
+| Code coverage | 1 |
 | Test run time | 1 |
 | Limit headroom | 1 |
 | Resource efficiency | 1 |
 
 Gate: if the code fails to compile, the run is gated and the overall score is 0. Failing tests are not a gate. They lower the Tests passing score.
 
-Baseline overall: 41.4.
+Baseline overall: 49.8.
 
 ## Collecting inputs
 
