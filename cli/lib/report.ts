@@ -74,7 +74,9 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
   const totals = Object.fromEntries(STEPS.map((s) => [s, 0]));
   const series = STEPS.map((step) => ({ hours: 0, step, usd: 0 }));
   for (const r of rows) {
+    const startHours = round((Date.parse(r.at) - start) / HOUR, 3);
     for (const step of STEPS) {
+      series.push({ hours: startHours, step, usd: round(totals[step], 4) });
       totals[step] += r.cost[step];
       series.push({ hours: r.hours, step, usd: round(totals[step], 4) });
     }

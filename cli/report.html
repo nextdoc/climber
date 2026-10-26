@@ -11,19 +11,21 @@
 :root{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e6e5e0;--keep:#2a78d6;--discard:#8f8e89;--gated:#c26a1b;--rejected:#b8433a;--nochange:#b5b4ae;--error:#8e2a8e;--up:#1f7a3d;--down:#b8433a}
 @media (prefers-color-scheme:dark){:root{--surface:#1a1a19;--text:#fff;--muted:#c3c2b7;--grid:#383835;--keep:#3987e5;--discard:#8f8e89;--gated:#e08a3c;--rejected:#e0675d;--nochange:#5e5d59;--error:#c565c5;--up:#4cc176;--down:#e0675d}}
 body{margin:0;padding:24px 16px;background:var(--surface);color:var(--text);font:14px/1.4 system-ui,sans-serif}
-main{max-width:1100px;margin:0 auto}
+main{max-width:1280px;margin:0 auto}
 h1{font-size:20px;margin:0 0 4px}
 .meta{color:var(--muted);font-size:13px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px 16px}
 .meta b{color:var(--text);font-weight:500}
 code{font:12px ui-monospace,monospace}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:24px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px;margin-bottom:24px}
 .card{border:1px solid var(--grid);border-radius:10px;padding:14px 16px;display:flex;gap:16px;align-items:center}
 .card svg.graphic{flex:none}
+.card > div{min-width:0}
 .card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
 .card .big{font-size:28px;font-weight:600;line-height:1.1}
 .card .sub{color:var(--muted);font-size:13px;margin-top:4px}
-.card .row{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:13px}
-.card .row svg{flex:none;color:var(--muted)}
+.card .row{margin-top:4px;font-size:13px}
+.card .row svg{vertical-align:-3px;margin-right:6px;color:var(--muted)}
+.card .row svg[width="10"]{vertical-align:-1px}
 h2{font-size:14px;color:var(--muted);font-weight:600;margin:28px 0 8px}
 .chart{width:100%}
 .scroll{overflow-x:auto}
@@ -187,12 +189,14 @@ vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.jso
 const usd = x => `$${x.toFixed(2)}`;
 document.getElementById("cost-title").textContent =
   `Cumulative agent cost by step: ${usd(data.cost.total)} total (${Object.entries(data.cost.byStep).map(([k, v]) => `${k} ${usd(v)}`).join(", ")}), estimated at list price`;
+const byCost = Object.entries(data.cost.byStep).sort(([, a], [, b]) => b - a).map(([step]) => step);
 vegaEmbed("#cost", {$schema: "https://vega.github.io/schema/vega-lite/5.json", width: "container", height: 240, config,
-  data: {values: data.cost.series},
-  mark: {type: "area", interpolate: "step-after", line: true, opacity: 0.85},
+  data: {values: data.cost.series.map(p => ({...p, rank: byCost.indexOf(p.step)}))},
+  mark: {type: "area", line: {strokeWidth: 2}, opacity: 0.25},
   encoding: {x: hoursAxis,
              y: {field: "usd", type: "quantitative", stack: "zero", title: "Cumulative cost (USD)", axis: {format: "$.2f"}},
-             color: {field: "step", title: "Step", scale: {domain: ["plan", "implement", "learn"], range: [css("--keep"), css("--gated"), css("--discard")]}},
+             color: {field: "step", title: "Step", scale: {domain: [...byCost].reverse(), range: [...byCost].reverse().map(step => css(STEP_COLOURS[step]))}},
+             order: {field: "rank"},
              tooltip: [{field: "step", title: "Step"}, {field: "hours", title: "Hours", format: ".2f"}, {field: "usd", title: "Cumulative", format: "$.2f"}]}}, {actions: false});
 
 const spark = series => {
