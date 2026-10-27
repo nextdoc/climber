@@ -22,7 +22,23 @@ type ClassCoverage = { name: string; totalLines: number; totalCovered: number };
 /** Weight per dimension. A missing dimension weighs 1, and 0 disables it and skips its tool. */
 export type Weights = Partial<Record<string, number>>;
 
-export type ScoreOptions = { app: string[]; test: string[]; run: string; root: string; weights?: Weights };
+/** How a run collects its inputs: deploy with the sf CLI, or Streamline scripts. Fixed for an ascent. */
+export type Mode = "deploy" | "streamline";
+
+/**
+ * headroomTest: the test whose limit use scores limit headroom.
+ * runCounts: how many test runs each Streamline measured scenario stands for in resource efficiency. A missing scenario counts once.
+ */
+export type ScoreOptions = {
+  app: string[];
+  test: string[];
+  run: string;
+  root: string;
+  headroomTest: string;
+  weights?: Weights;
+  mode?: Mode;
+  runCounts?: Record<string, number>;
+};
 
 export type DimensionScore = { name: string; weight: number; score: number; [detail: string]: unknown };
 
@@ -55,8 +71,6 @@ const GOVERNOR_LIMITS = [
   "Number of DML rows",
   "Maximum CPU time"
 ];
-
-const HEADROOM_TEST = "AccountHealthRollupTest.headroomAt200Accounts";
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -154,30 +168,30 @@ function testLimits(log: string): Map<string, LimitUsage> {
 
 const percentOf = (u: { used: number; limit: number }) => round((100 * u.used) / u.limit);
 
-function scoreHeadroom(limits: Map<string, LimitUsage>): DimensionScore {
-  const usage = limits.get(HEADROOM_TEST);
+function scoreHeadroom(limits: Map<string, LimitUsage>, test: string): DimensionScore {
+  const usage = limits.get(test);
   if (usage === undefined) {
-    return { name: "Limit headroom", weight: 1, test: HEADROOM_TEST, peakPercent: null, score: 0 };
+    return { name: "Limit headroom", weight: 1, test, peakPercent: null, score: 0 };
   }
   const percentOfLimit = Object.fromEntries(Object.entries(usage).map(([name, u]) => [name, percentOf(u)]));
   const peakPercent = Math.max(...Object.values(percentOfLimit));
   return {
     name: "Limit headroom",
     weight: 1,
-    test: HEADROOM_TEST,
+    test,
     percentOfLimit,
     peakPercent,
     score: Math.max(0, 100 - peakPercent)
   };
 }
 
-function scoreEfficiency(limits: Map<string, LimitUsage>): DimensionScore {
+function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTest: string, runCounts: Record<string, number> = {}): DimensionScore {
   const totals: LimitUsage = {};
   for (const [test, usage] of limits) {
-    if (test === HEADROOM_TEST) continue;
+    if (test === headroomTest) continue;
     for (const [name, u] of Object.entries(usage)) {
       totals[name] ??= { used: 0, limit: u.limit };
-      totals[name].used += u.used;
+      totals[name].used += u.used * (runCounts[test] ?? 1);
     }
   }
   const percentOfLimit = Object.fromEntries(Object.entries(totals).map(([name, u]) => [name, percentOf(u)]));
@@ -185,27 +199,52 @@ function scoreEfficiency(limits: Map<string, LimitUsage>): DimensionScore {
   return { name: "Resource efficiency", weight: 1, percentOfLimit, penalty, score: halfScore(170, penalty) };
 }
 
+/** Streamline scripts log results as TEST|Class.method|PASS, FAIL or SKIP, and limit use as LIMITS|Class.method|{"name": {used, limit}}. */
+const streamlineLines = (log: string, kind: string) =>
+  [...log.replaceAll("&#124;", "|").matchAll(new RegExp(`\\|DEBUG\\|${kind}\\|([^|]+)\\|(.*)$`, "gm"))].map((m) => [m[1], m[2]] as const);
+
+type VariantOutcome = { compiled: boolean; success: boolean };
+
+/** An uncaught exception stops a variant before it logs its remaining tests, so each one counts as one failing test. */
+function streamlineTests(log: string, variants: VariantOutcome[]): TestSummary {
+  const outcomes = streamlineLines(log, "TEST").map(([, outcome]) => outcome).filter((o) => !o.startsWith("SKIP"));
+  const passing = outcomes.filter((o) => o === "PASS").length;
+  const testsRan = outcomes.length + variants.filter((v) => !v.success).length;
+  return { testsRan, passing, failing: testsRan - passing, testExecutionTime: "" };
+}
+
+const streamlineLimits = (log: string) =>
+  new Map(streamlineLines(log, "LIMITS").map(([test, json]) => [test, JSON.parse(json) as LimitUsage]));
+
+const readLogs = (run: string) => {
+  const logsDir = join(run, "logs");
+  return readdirSync(logsDir).map((f) => readFileSync(join(logsDir, f), "utf8")).join("\n");
+};
+
+const unavailable = (name: string) => () => {
+  throw new Error(`${name} is not available in streamline mode. Set its weight to 0.`);
+};
+
 export function scoreRun(opts: ScoreOptions): ScoreResult {
-  const deploy = readJson(join(opts.run, "deploy.json"));
-  if (deploy.result?.success !== true) {
+  const streamline = opts.mode === "streamline";
+  const variants: VariantOutcome[] = streamline ? readJson(join(opts.run, "streamline.json")) : [];
+  const compiled = streamline ? variants.every((v) => v.compiled) : readJson(join(opts.run, "deploy.json")).result?.success === true;
+  if (!compiled) {
     return { gated: true, gate: "compile", overall: 0 };
   }
   const enabled = enabledDimensions(opts.weights);
   if (enabled.length === 0) throw new Error("Every dimension has weight 0");
   const files = appFiles(opts);
   const tests = () => readJson(join(opts.run, "tests.json")).result;
-  const limits = () => {
-    const logsDir = join(opts.run, "logs");
-    return testLimits(readdirSync(logsDir).map((f) => readFileSync(join(logsDir, f), "utf8")).join("\n"));
-  };
+  const limits = () => (streamline ? streamlineLimits : testLimits)(readLogs(opts.run));
   const scorers: Record<string, () => DimensionScore> = {
     PMD: () => scoreViolations("PMD", join(opts.run, "pmd.json"), files, opts.root),
     "Graph Engine": () => scoreViolations("Graph Engine", join(opts.run, "sfge.json"), files, opts.root),
-    "Tests passing": () => scoreTestsPassing(tests().summary),
-    "Code coverage": () => scoreCoverage(tests().coverage?.coverage ?? [], files),
-    "Test run time": () => scoreTestRunTime(tests().summary),
-    "Limit headroom": () => scoreHeadroom(limits()),
-    "Resource efficiency": () => scoreEfficiency(limits())
+    "Tests passing": () => scoreTestsPassing(streamline ? streamlineTests(readLogs(opts.run), variants) : tests().summary),
+    "Code coverage": streamline ? unavailable("Code coverage") : () => scoreCoverage(tests().coverage?.coverage ?? [], files),
+    "Test run time": streamline ? unavailable("Test run time") : () => scoreTestRunTime(tests().summary),
+    "Limit headroom": () => scoreHeadroom(limits(), opts.headroomTest),
+    "Resource efficiency": () => scoreEfficiency(limits(), opts.headroomTest, streamline ? opts.runCounts : undefined)
   };
   const dimensions = enabled.map((name) => ({ ...scorers[name](), weight: weightOf(opts.weights, name) }));
   const totalWeight = dimensions.reduce((sum, d) => sum + d.weight, 0);
@@ -216,4 +255,3 @@ export function scoreRun(opts: ScoreOptions): ScoreResult {
     overall: round(overall)
   };
 }
-

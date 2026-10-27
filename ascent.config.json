@@ -12,6 +12,7 @@
     ],
     "holdout": []
   },
+  "headroomTest": "AccountHealthRollupTest.headroomAt200Accounts",
   "steps": {
     "plan": {
       "model": "claude-opus-5-5",
@@ -48,5 +49,19 @@
     "Test run time": 3,
     "Limit headroom": 3,
     "Resource efficiency": 1
+  },
+  "streamline": {
+    "classes": [
+      "force-app/main/default/classes/AccountHealthRollup.cls",
+      "force-app/main/default/classes/Fixtures.cls"
+    ],
+    "scenarios": "apex/streamline/scenarios/AccountHealthRollupTest.apex",
+    "variants": {
+      "correctness": "new AccountHealthRollupTest().runCorrectness();",
+      "headroom": "new AccountHealthRollupTest().runHeadroom();"
+    },
+    "runCounts": {
+      "AccountHealthRollupTest.ratesEveryAccount": 9
+    }
   }
 }

@@ -87,8 +87,12 @@ describe("AscentConfig", () => {
     testClasses: { sample: ["ATest"], holdout: ["BTest"] },
     steps: Object.fromEntries(["plan", "implement", "learn"].map((s) => [s, { model: "m", command: 'claude -p --model "$MODEL"' }])),
     maxDiscards: 5,
-    margins
+    margins,
+    headroomTest: "ATest.headroom"
   };
+
+  const streamline = { classes: ["a"], scenarios: "s.apex", variants: { correctness: "new S().run();" } };
+  const unavailableOff = { "Code coverage": 0, "Test run time": 0 };
 
   test("accepts disjoint sample and holdout classes", () => {
     expect(AscentConfig.safeParse(config).success).toBe(true);
@@ -96,6 +100,18 @@ describe("AscentConfig", () => {
 
   test("rejects a class in both sample and holdout", () => {
     expect(AscentConfig.safeParse({ ...config, testClasses: { sample: ["ATest"], holdout: ["ATest"] } }).success).toBe(false);
+  });
+
+  test("accepts streamline mode with a streamline block and the unavailable dimensions off", () => {
+    expect(AscentConfig.safeParse({ ...config, mode: "streamline", streamline, weights: unavailableOff }).success).toBe(true);
+  });
+
+  test("rejects streamline mode without a streamline block", () => {
+    expect(AscentConfig.safeParse({ ...config, mode: "streamline", weights: unavailableOff }).success).toBe(false);
+  });
+
+  test("rejects streamline mode that weighs code coverage", () => {
+    expect(AscentConfig.safeParse({ ...config, mode: "streamline", streamline, weights: { "Test run time": 0 } }).success).toBe(false);
   });
 });
 

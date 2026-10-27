@@ -119,7 +119,7 @@ describe("CLIs", () => {
   });
 
   test("score skips a dimension with weight 0", () => {
-    const args = ["-a", "force-app/**/classes/*.cls", "-t", "force-app/**/classes/*Test.cls", "-r", "target/tmp/score"];
+    const args = ["-a", "force-app/**/classes/*.cls", "-t", "force-app/**/classes/*Test.cls", "-r", "target/tmp/score", "--headroom-test", "AccountHealthRollupTest.headroomAt200Accounts"];
     const result = JSON.parse(cli("score.ts", ...args, "-w", '{"Graph Engine": 0}'));
     expect(result.gated).toBe(false);
     expect(result.dimensions.map((d: { name: string }) => d.name)).not.toContain("Graph Engine");

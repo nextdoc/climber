@@ -73,6 +73,16 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 - `npm run prettier` - format all files.
 - `npm run prettier:verify` - check formatting without writing changes.
 
+## Documentation
+
+| Document | Covers |
+|---|---|
+| [Glossary](doc/glossary.md) | The terms used across the tools and docs, such as ascent, iteration, dimension, margin and mode. |
+| [Scoring](doc/scoring.md) | Each dimension's source, formula and half-score penalty, the overall score, and how inputs are collected. |
+| [Streamline](doc/streamline.md) | The two uses of Streamline: planner probes, and Streamline mode as a faster alternative to deploy mode. Draft. |
+| [Caveats](doc/caveats.md) | Known limits on what the scores mean. |
+| [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the sample class the ascents climb. |
+
 ## Files overview
 
 Each ascent creates two directories under `target/`, which git ignores. The worktree holds the code being improved, and the ascent directory records what happened.
@@ -114,7 +124,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 
 ### ascent-init
 
-`bun cli/ascent-init.ts <name> -o <org>` starts an ascent. It creates the branch `ascent/<name>` and a worktree at `target/worktrees/<name>`, formats and commits the baseline, then scores it.
+`bun cli/ascent-init.ts <name> -o <org>` starts an ascent. It creates the branch `ascent/<name>` and a worktree at `target/worktrees/<name>`, formats and commits the baseline, then scores it. `--mode streamline` scores with Streamline scripts instead of a deploy and Apex test run (`doc/streamline.md`).
 
 | Option | Default | Description |
 |---|---|---|

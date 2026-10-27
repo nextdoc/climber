@@ -2,7 +2,10 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import { DIMENSION_NAMES, scoreRun, weightOf, type ScoreResult } from "./scoring.ts";
+import { compose } from "./compose.ts";
+import { ExtractError } from "./extract.ts";
+import { DIMENSION_NAMES, scoreRun, weightOf, type ScoreOptions, type ScoreResult } from "./scoring.ts";
+import { runVariants } from "./streamline.ts";
 
 const Dimension = z.enum(DIMENSION_NAMES as [string, ...string[]]);
 
@@ -20,7 +23,24 @@ const Step = z.strictObject({
 
 export type Step = z.infer<typeof Step>;
 
-export const AscentConfig = z.strictObject({
+/** Dimensions streamline mode cannot measure, because anonymous Apex reports neither coverage nor test run time. */
+export const STREAMLINE_UNAVAILABLE = ["Code coverage", "Test run time"];
+
+/** What streamline mode composes into one anonymous Apex script per variant. Paths are relative to the worktree. */
+const StreamlineConfig = z.strictObject({
+  /** Globs of the classes to extract, application classes and test fixtures alike. */
+  classes: z.array(z.string()).min(1),
+  /** The scenario classes, which log TEST and LIMITS lines. */
+  scenarios: z.string().min(1),
+  /** The CODE section statement per variant, e.g. {"correctness": "new AccountHealthRollupTest().runCorrectness();"}. */
+  variants: z.record(z.string().regex(/^[\w-]+$/), z.string().min(1)),
+  /** How many test runs each measured scenario stands for in resource efficiency. */
+  runCounts: z.record(z.string(), z.int().positive()).default({})
+});
+
+export type StreamlineConfig = z.infer<typeof StreamlineConfig>;
+
+const AscentFields = z.strictObject({
   name: z.string().min(1),
   branch: z.string().min(1),
   worktree: z.string().min(1),
@@ -38,13 +58,26 @@ export const AscentConfig = z.strictObject({
   steps: z.strictObject({ plan: Step, implement: Step, learn: Step, retro: Step.optional() }),
   maxDiscards: z.int().positive(),
   margins: ByDimension,
-  weights: z.partialRecord(Dimension, z.number().nonnegative()).default({})
+  weights: z.partialRecord(Dimension, z.number().nonnegative()).default({}),
+  /** Lets the plan step run anonymous Apex probes with Streamline. Fixed per ascent so ascents with and without it can be compared. */
+  plannerStreamline: z.boolean().default(false),
+  /** How runs collect their inputs. Fixed per ascent, because scores from the two modes differ. */
+  mode: z.enum(["deploy", "streamline"]).default("deploy"),
+  /** The test whose limit use scores limit headroom. Resource efficiency leaves it out. */
+  headroomTest: z.string().min(1),
+  streamline: StreamlineConfig.optional()
+});
+
+export const AscentConfig = AscentFields.refine((c) => c.mode === "deploy" || c.streamline !== undefined, {
+  message: "Streamline mode needs a streamline block"
+}).refine((c) => c.mode === "deploy" || STREAMLINE_UNAVAILABLE.every((d) => weightOf(c.weights, d) === 0), {
+  message: `Streamline mode needs weight 0 for ${STREAMLINE_UNAVAILABLE.join(" and ")}`
 });
 
 export type AscentConfig = z.infer<typeof AscentConfig>;
 
 /** The committed ascent.config.json: an ascent config without the fields that belong to one ascent. */
-export const AscentDefaults = AscentConfig.omit({
+export const AscentDefaults = AscentFields.omit({
   name: true,
   branch: true,
   worktree: true,
@@ -76,6 +109,7 @@ export const HistoryEntry = z.strictObject({
   reason: z.string().optional(),
   focus: z.array(Dimension).optional(),
   edits: z.array(z.string()).optional(),
+  probes: z.array(z.string()).optional(),
   decision: z.array(z.string()).optional(),
   learning: z.string().optional(),
   scores: SomeDimensions.optional(),
@@ -90,6 +124,9 @@ export const HistoryEntry = z.strictObject({
 export type HistoryEntry = z.infer<typeof HistoryEntry>;
 
 export const REPO_ROOT = resolve(import.meta.dirname, "../..");
+
+/** Holds the Streamline server. Gitignored, so worktrees lack it and the plan step is pointed at this one. */
+export const MCP_CONFIG = join(REPO_ROOT, ".mcp.json");
 
 export const ASCENTS_DIR = join(REPO_ROOT, "target/ascents");
 
@@ -141,6 +178,15 @@ export function git(cwd: string, ...args: string[]): string {
   return result.stdout.trim();
 }
 
+/** Streamline runs agent-written code outside Apex tests, so it is only allowed against a scratch org. */
+export function assertScratchOrg(org: string) {
+  const result = run("sf", ["org", "list", "--json"], REPO_ROOT);
+  const scratchOrgs: { alias?: string; username: string }[] = JSON.parse(result.stdout).result?.scratchOrgs ?? [];
+  if (!scratchOrgs.some((o) => o.alias === org || o.username === org)) {
+    throw new Error(`${org} is not a scratch org. Streamline is only allowed against scratch orgs.`);
+  }
+}
+
 /** Parses the last JSON object in an agent's reply that matches the schema. */
 export function lastJson<T>(output: string, schema: z.ZodType<T>): T {
   for (let i = output.lastIndexOf("{"); i >= 0; i = output.lastIndexOf("{", i - 1)) {
@@ -177,20 +223,51 @@ export function formatApp(config: AscentConfig) {
   if (result.status !== 0) throw new Error(`prettier failed: ${result.stderr.trim()}`);
 }
 
-/** Deploys, analyses and tests the worktree into the run folder, then scores it. */
-export function collectAndScore(config: AscentConfig, folder: string): ScoreResult {
+export function scoreOptions(config: AscentConfig, folder: string): ScoreOptions {
+  return {
+    app: config.app,
+    test: config.test,
+    run: folder,
+    root: config.worktree,
+    weights: config.weights,
+    mode: config.mode,
+    headroomTest: config.headroomTest,
+    runCounts: config.streamline?.runCounts
+  };
+}
+
+const TEST_DIMENSIONS = ["Tests passing", "Code coverage", "Test run time", "Limit headroom", "Resource efficiency"];
+
+/**
+ * Collects the run folder inputs, then scores them. Deploy mode deploys, analyses and runs the Apex tests.
+ * Streamline mode analyses without deploying, then runs the composed variant scripts with Streamline.
+ */
+export async function collectAndScore(config: AscentConfig, folder: string): Promise<ScoreResult> {
+  const streamline = config.mode === "streamline";
   const prepare = join(REPO_ROOT, "cli/score-prepare.sh");
   const classes = [...config.testClasses.sample, ...config.testClasses.holdout].join(",");
   const off = (...names: string[]) => (names.every((n) => weightOf(config.weights, n) === 0) ? "1" : "");
   const result = run(prepare, [config.targetOrg, folder, classes], config.worktree, undefined, {
+    SKIP_DEPLOY: streamline ? "1" : "",
     SKIP_PMD: off("PMD"),
     SKIP_SFGE: off("Graph Engine"),
-    SKIP_TESTS: off("Tests passing", "Code coverage", "Test run time", "Limit headroom", "Resource efficiency"),
+    SKIP_TESTS: streamline ? "1" : off(...TEST_DIMENSIONS),
     SKIP_LOGS: off("Limit headroom", "Resource efficiency")
   });
   writeFileSync(join(folder, "prepare.log"), result.stdout + result.stderr);
   if (result.status !== 0) throw new Error(`score-prepare failed, see ${join(folder, "prepare.log")}`);
-  return scoreRun({ app: config.app, test: config.test, run: folder, root: config.worktree, weights: config.weights });
+  if (streamline) {
+    assertScratchOrg(config.targetOrg);
+    try {
+      compose(config.worktree, folder, config.streamline!);
+    } catch (error) {
+      if (!(error instanceof ExtractError)) throw error;
+      writeFileSync(join(folder, "extract-error.txt"), error.message);
+      return { gated: true, gate: "extract", overall: 0 };
+    }
+    await runVariants(MCP_CONFIG, config.targetOrg, folder, Object.keys(config.streamline!.variants));
+  }
+  return scoreRun(scoreOptions(config, folder));
 }
 
 export function scoresByName(result: ScoreResult): Record<string, number> {

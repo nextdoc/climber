@@ -19,8 +19,10 @@ import {
   lastJson,
   loadConfig,
   loadHistory,
+  MCP_CONFIG,
   run,
   runDir,
+  scoreOptions,
   scoresByName,
   type AscentConfig,
   type HistoryEntry,
@@ -31,7 +33,16 @@ import { enabledDimensions, findings, scoreRun } from "./lib/scoring.ts";
 
 type Options = { dryRun: boolean };
 
-const Plan = z.object({ reason: z.string().min(1), focus: z.array(z.string()), edits: z.array(z.string()).default([]) });
+const Plan = z.object({
+  reason: z.string().min(1),
+  focus: z.array(z.string()),
+  edits: z.array(z.string()).default([]),
+  probes: z.array(z.string()).optional()
+});
+
+const MAX_PROBES = 5;
+
+const STREAMLINE_TOOLS = ["loadAccessToken", "runAndRollback", "getFilteredOrgData"].map((t) => `mcp__streamline__${t}`);
 
 const Learning = z.object({ learning: z.string().min(1) });
 
@@ -50,7 +61,7 @@ function summariseHistory(history: HistoryEntry[]): string {
 
 function planPrompt(config: AscentConfig, history: HistoryEntry[], editable: Set<string>): string {
   const current = kept(history).at(-1)!;
-  const options = { app: config.app, test: config.test, run: current.run!, root: config.worktree, weights: config.weights };
+  const options = scoreOptions(config, current.run!);
   return `You are the plan step of one iteration of an ascent that improves Salesforce Apex code by hill climbing.
 
 Plan one candidate: 1 to 6 related edits aimed at one weakness. Read the code, but do not edit any file.
@@ -70,9 +81,18 @@ ${findings(options).join("\n")}
 
 Recent iterations and their learnings (do not repeat a discarded change):
 ${summariseHistory(history)}
-
+${config.plannerStreamline ? probeInstructions(config) : ""}
 End your reply with one JSON object and nothing after it. Write each edit precisely enough to implement without your reasoning:
-{"reason": "the weakness and why this fixes it", "focus": ["dimension names this should raise"], "edits": ["one line per edit"]}
+{"reason": "the weakness and why this fixes it", "focus": ["dimension names this should raise"], "edits": ["one line per edit"]${config.plannerStreamline ? ', "probes": ["one line per probe: the question and what it showed"]' : ""}}
+`;
+}
+
+function probeInstructions(config: AscentConfig): string {
+  return `
+Probes: you may run up to ${MAX_PROBES} small anonymous Apex scripts with Streamline (runAndRollback, orgAlias "${config.targetOrg}") to answer questions before you plan, such as whether an approach compiles, what a query returns, or how much CPU or how many queries an approach uses. The org is rolled back after each one.
+- Test only the isolated change: a query, an expression or a small method, with the few records it needs. Do not copy whole classes into a probe, and do not call the org's application classes, which may not match the worktree.
+- Do not run the test classes or reproduce their scenarios, and do not read test class bodies from the org.
+- Probes do not decide anything. The harness scores your candidate after the implement step, and only that score decides keep or discard.
 `;
 }
 
@@ -119,7 +139,11 @@ function runStep(
   const step: Step = config.steps[name];
   writeFileSync(join(folder, `${name}-prompt.md`), prompt);
   const started = Date.now();
-  const result = run("sh", ["-c", step.command], config.worktree, prompt, { MODEL: step.model });
+  const command =
+    name === "plan" && config.plannerStreamline
+      ? `${step.command} --mcp-config '${MCP_CONFIG}' --allowedTools ${STREAMLINE_TOOLS.join(",")}`
+      : step.command;
+  const result = run("sh", ["-c", command], config.worktree, prompt, { MODEL: step.model });
   writeFileSync(join(folder, `${name}.txt`), result.stdout + result.stderr);
   let parsed: z.infer<typeof ClaudeResult> | undefined;
   try {
@@ -158,7 +182,7 @@ new Command()
   .description("Run one iteration of an ascent: plan, implement, score, keep or discard, then learn")
   .argument("<name>", "ascent name")
   .option("--dry-run", "run every step, then restore the worktree instead of committing", false)
-  .action((name: string, opts: Options) => {
+  .action(async (name: string, opts: Options) => {
     const config = loadConfig(name);
     const history = loadHistory(name);
     const iteration = Math.max(...history.map((e) => e.iteration)) + 1;
@@ -207,7 +231,7 @@ new Command()
           entry.outcome = "rejected";
           entry.decision = ["repeats a discarded change"];
         } else {
-          const result = collectAndScore(config, folder);
+          const result = await collectAndScore(config, folder);
           const current = kept(history).at(-1)!.scores!;
           const decision = decide(current, bestScores(history), result, entry.focus, config.margins);
           Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
@@ -272,4 +296,4 @@ new Command()
       )
     );
   })
-  .parse();
+  .parseAsync();

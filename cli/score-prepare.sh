@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Collects the raw inputs for cli/score.ts into one output directory.
 # SKIP_PMD, SKIP_SFGE, SKIP_TESTS and SKIP_LOGS set to 1 skip the inputs of dimensions with weight 0.
+# SKIP_DEPLOY set to 1 skips the deploy and its compile gate, for streamline mode, which compiles in its scripts.
 set -uo pipefail
 
 [ $# -eq 3 ] || { echo "Usage: $0 <target-org alias or username> <run folder> <comma-separated test classes>" >&2; exit 1; }
@@ -17,9 +18,11 @@ tooling_query() {
 
 # Compile gate: a failed deploy stops collection, and the scorer reports the gate from deploy.json.
 # Each worktree has its own source tracking, so org changes from other worktrees show as conflicts.
-sf project deploy start -o "$ORG" --source-dir force-app --ignore-conflicts --json > "$OUT/deploy.json"
-jq -e '.result.success != null' "$OUT/deploy.json" > /dev/null || { jq -r '.message' "$OUT/deploy.json" >&2; exit 1; }
-[ "$(jq -r '.result.success' "$OUT/deploy.json")" = "true" ] || exit 0
+if [ "${SKIP_DEPLOY:-}" != 1 ]; then
+  sf project deploy start -o "$ORG" --source-dir force-app --ignore-conflicts --json > "$OUT/deploy.json"
+  jq -e '.result.success != null' "$OUT/deploy.json" > /dev/null || { jq -r '.message' "$OUT/deploy.json" >&2; exit 1; }
+  [ "$(jq -r '.result.success' "$OUT/deploy.json")" = "true" ] || exit 0
+fi
 
 [ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run --rule-selector pmd --target force-app --output-file "$OUT/pmd.json" || exit 1
 [ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run --rule-selector sfge --workspace force-app --output-file "$OUT/sfge.json" || exit 1

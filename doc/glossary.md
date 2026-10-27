@@ -10,6 +10,9 @@
 | Learn | The agent step that runs after the keep or discard decision. It reads the plan, the diff and the score changes, then writes one learning to the history. |
 | Candidate | The bundle of code edits an iteration tries, aimed at one weakness. |
 | Run | One collection of raw inputs (deploy, analyzers, tests, logs) into a run folder, and the scores computed from it. |
+| Mode | How runs collect their inputs from the org: deploy or Streamline. Chosen when the ascent starts and fixed for the whole ascent. Each mode has its own weights and settings in the ascent config. |
+| Deploy mode | Deploys the application and test classes, then runs the Apex test classes with the sf CLI. The only mode that scores code coverage. |
+| Streamline mode | Composes anonymous Apex scripts from the class files and runs them with Streamline, which rolls back the org afterwards. Nothing is deployed. Faster than deploy mode, but cannot score coverage or run static entry points. |
 | Baseline | The scores of the code before the climb starts, or after the corpus selection changes. |
 | Dimension | One measured aspect of the code, such as PMD or test run time. Each scores 0 to 100. |
 | Score | A dimension's value from 0 to 100. 100 is perfect. |
