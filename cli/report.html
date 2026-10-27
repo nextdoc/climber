@@ -176,21 +176,22 @@ const tip = [{field: 'iteration', title: 'Iteration'}, {field: 'outcome', title:
   {field: 'focusText', title: 'Focus'}, {field: 'reason', title: 'Reason'}];
 const withFocus = rows => rows.map(r => ({...r, focusText: r.focus.join(', ')}));
 const lastHours = Math.max(s.hours, ...climb.map(r => r.hours));
-const fiveMinutes = Array.from({length: Math.ceil(lastHours * 12) + 1}, (_, i) => i / 12);
+const fiveMinutes = Array.from({length: Math.max(1, Math.ceil(lastHours * 12)) + 1}, (_, i) => i / 12);
 const minutes = 'round(datum.value * 60)';
 const waiting = id => { document.getElementById(id).innerHTML = '<div class="empty">No iterations yet. This chart fills in after the first one finishes.</div>'; };
 const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Time since baseline (h:mm)',
   scale: {domain: [0, fiveMinutes.at(-1)], nice: false},
   axis: {values: fiveMinutes, labelExpr: `${minutes} % 15 ? '' : floor(${minutes} / 60) + ':' + pad(${minutes} % 60, 2, '0', 'left')`}};
-if (!climb.length) waiting('climb');
-else vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
+const ends = steps.length > 1 && steps.at(-1).current.toFixed(0) !== steps[0].current.toFixed(0)
+  ? [[steps[0], 'left'], [steps.at(-1), 'right']] : [[steps.at(-1), 'left']];
+vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
   vconcat: [
     {width: 'container', height: 320, layer: [
       {data: {values: steps}, mark: {type: 'line', interpolate: 'step-after', strokeWidth: 2, color: css('--keep')},
        encoding: {x: {...hoursAxis, axis: {...hoursAxis.axis, title: null, labels: false}}, y: {field: 'current', type: 'quantitative', title: 'Overall score', scale: {zero: false}}}},
       {data: {values: s.fit}, mark: {type: 'line', strokeDash: [6, 4], strokeWidth: 2, color: css('--muted')},
        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'fit', type: 'quantitative'}}},
-      ...[[steps[0], 'left'], [steps.at(-1), 'right']].map(([step, align]) => (
+      ...ends.map(([step, align]) => (
        {data: {values: [step]}, mark: {type: 'text', align, baseline: 'bottom', dy: -6, fontSize: 28, fontWeight: 600, color: css('--text')},
         encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'current', type: 'quantitative'}, text: {field: 'current', format: '.0f'}}})),
       {data: {values: withFocus(scored)}, mark: {type: 'point', size: 90, strokeWidth: 2, opacity: 1},
