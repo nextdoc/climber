@@ -40,13 +40,13 @@ if [ "${SKIP_LOGS:-}" != 1 ]; then
   USERNAME=$(sf org display -o "$ORG" --json | jq -r '.result.username')
   USER_ID=$(sf data query -o "$ORG" --json -q "SELECT Id FROM User WHERE Username = '$USERNAME'" | jq -r '.result.records[0].Id')
   END=$(date -u -v+1H +%Y-%m-%dT%H:%M:%S.000Z)
-  TRACE_FLAG_ID=$(tooling_query "SELECT Id FROM TraceFlag WHERE DebugLevelId = '$DEBUG_LEVEL_ID' AND TracedEntityId = '$USER_ID'")
+  TRACE_FLAG_ID=$(tooling_query "SELECT Id FROM TraceFlag WHERE TracedEntityId = '$USER_ID' AND LogType = 'USER_DEBUG'")
   if [ -z "$TRACE_FLAG_ID" ]; then
     sf data create record -o "$ORG" --use-tooling-api --json -s TraceFlag \
       -v "TracedEntityId=$USER_ID DebugLevelId=$DEBUG_LEVEL_ID LogType=USER_DEBUG StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
   else
     sf data update record -o "$ORG" --use-tooling-api --json -s TraceFlag -i "$TRACE_FLAG_ID" \
-      -v "StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
+      -v "DebugLevelId=$DEBUG_LEVEL_ID StartDate=$START ExpirationDate=$END" > /dev/null || exit 1
   fi
 fi
 
