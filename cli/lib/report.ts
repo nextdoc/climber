@@ -83,6 +83,8 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
   return {
     ascent: {
       name: config.name,
+      mode: config.mode,
+      plannerStreamline: config.plannerStreamline,
       targetOrg: config.targetOrg,
       branch: config.branch,
       baseCommit: config.baseCommit,

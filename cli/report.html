@@ -90,7 +90,7 @@ document.title = `${a.name} ascent`;
 document.getElementById('title').textContent = `${a.name} ascent`;
 const when = t => new Date(t).toLocaleString();
 document.getElementById('meta').innerHTML = [
-  ['Org', esc(a.targetOrg)], ['Branch', `<code>${esc(a.branch)}</code>`], ['Base', `<code>${esc(a.baseCommit.slice(0, 8))}</code>`],
+  ['Mode', esc(a.mode) + (a.plannerStreamline ? ' + planner probes' : '')], ['Org', esc(a.targetOrg)], ['Branch', `<code>${esc(a.branch)}</code>`], ['Base', `<code>${esc(a.baseCommit.slice(0, 8))}</code>`],
   ['Started', esc(when(a.createdAt))], ['Updated', esc(when(a.updatedAt))]
 ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
 
