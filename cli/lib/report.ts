@@ -102,10 +102,8 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
       perIteration: climb.length ? round((current - baseline.overall) / climb.length) : 0,
       angle: climb.length ? round((Math.atan((current - baseline.overall) / climb.length) * 180) / Math.PI, 1) : 0,
       minutesPerIteration: timed.length ? round(timed.reduce((s, r) => s + r.minutes!, 0) / timed.length, 1) : null,
-      fit: [
-        { hours: 0, fit: round(perHour.intercept) },
-        { hours, fit: round(perHour.intercept + perHour.slope * hours) }
-      ]
+      // Trimmed at both ends so the line clears the start and current score labels.
+      fit: [0.1, 0.9].map((t) => ({ hours: hours * t, fit: round(perHour.intercept + perHour.slope * hours * t) }))
     },
     cost: {
       total: round(STEPS.reduce((s, step) => s + totals[step], 0)),
