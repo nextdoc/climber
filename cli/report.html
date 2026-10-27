@@ -28,6 +28,7 @@ code{font:12px ui-monospace,monospace}
 .card .row svg[width="10"]{vertical-align:-1px}
 h2{font-size:14px;color:var(--muted);font-weight:600;margin:28px 0 8px}
 .chart{width:100%}
+.empty{color:var(--muted);padding:32px 16px;text-align:center;border:1px dashed var(--grid);border-radius:8px}
 .scroll{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th{color:var(--muted);font-weight:600;text-align:left;font-size:12px}
@@ -177,10 +178,12 @@ const withFocus = rows => rows.map(r => ({...r, focusText: r.focus.join(', ')}))
 const lastHours = Math.max(s.hours, ...climb.map(r => r.hours));
 const fiveMinutes = Array.from({length: Math.ceil(lastHours * 12) + 1}, (_, i) => i / 12);
 const minutes = 'round(datum.value * 60)';
+const waiting = id => { document.getElementById(id).innerHTML = '<div class="empty">No iterations yet. This chart fills in after the first one finishes.</div>'; };
 const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Time since baseline (h:mm)',
   scale: {domain: [0, fiveMinutes.at(-1)], nice: false},
   axis: {values: fiveMinutes, labelExpr: `${minutes} % 15 ? '' : floor(${minutes} / 60) + ':' + pad(${minutes} % 60, 2, '0', 'left')`}};
-vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
+if (!climb.length) waiting('climb');
+else vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
   vconcat: [
     {width: 'container', height: 320, layer: [
       {data: {values: steps}, mark: {type: 'line', interpolate: 'step-after', strokeWidth: 2, color: css('--keep')},
@@ -199,8 +202,10 @@ vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', 
      encoding: {x: hoursAxis, y: {field: 'outcome', type: 'nominal', title: null, scale: {domain: ['gated', 'rejected', 'no-change', 'error']}},
                 color: {...outcome, legend: null}, tooltip: tip}}
   ], resolve: {scale: {x: 'shared'}}}, {actions: false});
-vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', width: 'container', height: 200, config,
-  data: {values: withFocus(climb.filter(r => r.minutes != null))},
+const timed = climb.filter(r => r.minutes != null);
+if (!timed.length) waiting('durations');
+else vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', width: 'container', height: 200, config,
+  data: {values: withFocus(timed)},
   mark: {type: 'bar', cornerRadiusTopLeft: 4, cornerRadiusTopRight: 4, width: {expr: "min(40, bandwidth('x') * 0.8)"}},
   encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration', axis: {labelAngle: 0}},
              y: {field: 'minutes', type: 'quantitative', title: 'Minutes'},
@@ -210,7 +215,8 @@ const usd = x => `$${x.toFixed(2)}`;
 document.getElementById("cost-title").textContent =
   `Cumulative agent cost by step: ${usd(data.cost.total)} total (${Object.entries(data.cost.byStep).map(([k, v]) => `${k} ${usd(v)}`).join(", ")}), estimated at list price`;
 const byCost = Object.entries(data.cost.byStep).sort(([, a], [, b]) => b - a).map(([step]) => step);
-vegaEmbed("#cost", {$schema: "https://vega.github.io/schema/vega-lite/5.json", width: "container", height: 240, config,
+if (!data.rows.length) waiting("cost");
+else vegaEmbed("#cost", {$schema: "https://vega.github.io/schema/vega-lite/5.json", width: "container", height: 240, config,
   data: {values: data.cost.series.map(p => ({...p, rank: byCost.indexOf(p.step)}))},
   mark: {type: "area", line: {strokeWidth: 2}, opacity: 0.25},
   encoding: {x: hoursAxis,
@@ -243,7 +249,7 @@ document.getElementById('iterations').innerHTML = `
     <td class="num">${f(r.overall)}</td>
     <td>${deltas(r)}</td>
     <td class="notes">${note('Reason', r.reason)}${note('Decision', r.decision.join('; '))}${note('Learning', r.learning)}</td>
-    <td>${link('patch', r.patch)}${link('run', r.run)}</td></tr>`).join('')}`;
+    <td>${link('patch', r.patch)}${link('run', r.run)}</td></tr>`).join('') || '<tr><td colspan="6" class="focus">No iterations yet.</td></tr>'}`;
 
 if (data.retro) {
   const r = data.retro;
