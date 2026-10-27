@@ -177,7 +177,34 @@ export const dropVirtualClass: Transform = {
   }
 };
 
-export const TRANSFORMS: Transform[] = [rejectUnsupported, dropUncalledStaticMethods, staticToInstance, dropVirtualClass];
+/** Drops with, without and inherited sharing, which anonymous Apex classes do not allow. They run with the running user's sharing. */
+export const dropSharing: Transform = {
+  name: "drop-sharing",
+  edits(source) {
+    return source.type
+      .modifier_list()
+      .filter((m) => m.SHARING())
+      .map((m) => removeModifier(source, m));
+  }
+};
+
+/** Drops comments before the class, which make Streamline misdetect the script as flow mode and wrap the class in a try block. */
+export const dropLeadingComments: Transform = {
+  name: "drop-leading-comments",
+  edits(source) {
+    const start = source.type.start.start;
+    return start > 0 ? [{ start: 0, end: start, text: "" }] : [];
+  }
+};
+
+export const TRANSFORMS: Transform[] = [
+  rejectUnsupported,
+  dropUncalledStaticMethods,
+  staticToInstance,
+  dropVirtualClass,
+  dropSharing,
+  dropLeadingComments
+];
 
 /** Adapts one Apex type file for the CLASSES section of an anonymous Apex script. */
 export function extract(file: string, text: string, transforms: Transform[] = TRANSFORMS): { code: string; applied: string[] } {

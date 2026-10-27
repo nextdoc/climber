@@ -19,9 +19,9 @@ describe("extract", () => {
     expect(code).toBe(text.slice(0, start) + text.slice(end));
   });
 
-  test("copies a class that anonymous Apex accepts unchanged", () => {
+  test("copies a class that anonymous Apex accepts unchanged apart from its leading comment", () => {
     const [file, text] = classFile("Fixtures");
-    expect(extract(file, text)).toEqual({ code: text, applied: [] });
+    expect(extract(file, text)).toEqual({ code: text.slice(text.indexOf("public class")), applied: ["drop-leading-comments"] });
   });
 
   test("makes a called static method an instance method without its static-only annotation", () => {
@@ -44,6 +44,14 @@ describe("extract", () => {
 
   test("drops the virtual class modifier", () => {
     expect(extract("A.cls", "public virtual class A {}\n").code).toBe("public class A {}\n");
+  });
+
+  test.each(["with", "without", "inherited"])("drops %s sharing", (keyword) => {
+    expect(extract("A.cls", `public ${keyword} sharing class A {}\n`).code).toBe("public class A {}\n");
+  });
+
+  test("drops comments before the class", () => {
+    expect(extract("A.cls", "/**\n * @description doc\n */\n// note\npublic class A {}\n").code).toBe("public class A {}\n");
   });
 
   test.each([

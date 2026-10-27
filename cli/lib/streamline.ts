@@ -13,10 +13,13 @@ export type VariantResult = {
   executionMs: number;
 };
 
+/** A variant can run for up to its 10 s CPU limit plus queueing and log polling, beyond the SDK's 60 s default. */
+const TIMEOUT_MS = 180_000;
+
 type ServerConfig = { command: string; args?: string[]; env?: Record<string, string> };
 
 async function call<T>(client: Client, name: string, args: Record<string, unknown>): Promise<T> {
-  const result = await client.callTool({ name, arguments: args });
+  const result = await client.callTool({ name, arguments: args }, undefined, { timeout: TIMEOUT_MS });
   const text = (result.content as { type: string; text?: string }[]).find((c) => c.type === "text")?.text ?? "";
   if (result.isError) throw new Error(`${name} failed: ${text}`);
   return JSON.parse(text) as T;
@@ -66,6 +69,8 @@ export async function runVariants(mcpConfig: string, org: string, folder: string
         copyFileSync(log.filePath, join(dir, "logs", `${variant}.log`));
         rmSync(log.filePath);
       }
+      // Variants share their classes, so the rest would fail too, and Streamline stalls polling for a log after a compile failure.
+      if (!compiled) break;
     }
     writeFileSync(join(dir, "streamline.json"), JSON.stringify(results, null, 2) + "\n");
     return results;
