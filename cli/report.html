@@ -41,9 +41,20 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:now
 .notes .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-right:6px}
 .deltas{white-space:nowrap}
 a{color:var(--keep)}
+.refresh{position:fixed;top:12px;right:16px;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px;background:var(--surface);padding:2px 6px;border-radius:6px}
 </style>
 </head>
 <body><main>
+<label class="refresh"><input type="checkbox" id="refresh"> Refresh every minute</label>
+<script>
+// The setting lives in the query string so it survives the reload, including from a file:// URL.
+{
+  const box = document.getElementById('refresh');
+  box.checked = new URLSearchParams(location.search).get('refresh') !== 'off';
+  if (box.checked) setTimeout(() => location.reload(), 60000);
+  box.onchange = () => { location.search = box.checked ? '' : '?refresh=off'; };
+}
+</script>
 <h1 id="title"></h1>
 <div class="meta" id="meta"></div>
 <div class="tiles" id="tiles"></div>
