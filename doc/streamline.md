@@ -45,7 +45,7 @@ It suits a fast early pass that makes the bulk of the gains cheaply. A later asc
 | Benefits | Trade-offs |
 |---|---|
 | Much faster iterations: no deploy, and the scripts run in about 23 s against about 60 s of tests plus a deploy. | Code coverage and test run time cannot be measured, so they are weighted 0. |
-| The org never holds the candidate code. | CPU time reads about 30% lower than in Apex tests, so scores cannot be compared with deploy mode. |
+| The org never holds the candidate code, so an ascent leaves no persistent side effects: no class or test is overwritten. This holds for an ascent over several classes too, since every class is composed into the script. | CPU time reads about 30% lower than in Apex tests, so scores cannot be compared with deploy mode. |
 | PMD and Graph Engine still analyse the `.cls` files. | Static entry points such as `@InvocableMethod` cannot run. |
 | | Scenarios share data within a script, so they are less isolated than test methods. |
 
@@ -152,7 +152,8 @@ CPU time is about 30% lower in Streamline. Scores within one ascent stay compara
 ### Limits
 
 - Limits are per transaction and rollback does not refund them: 10,000 DML rows and 10 s CPU per variant.
-- The org never receives the kept code, so an ascent needs one deploy and full test run before merging.
+- Each composed script must stay within the anonymous Apex size limit, which caps how many classes one ascent can cover.
+- The org never receives the kept code, so an ascent needs one deploy and full test run before merging: `bun cli/confirm.ts <name>`.
 
 ### Open
 

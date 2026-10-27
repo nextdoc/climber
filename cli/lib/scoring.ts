@@ -42,7 +42,7 @@ export type ScoreOptions = {
 
 export type DimensionScore = { name: string; weight: number; score: number; [detail: string]: unknown };
 
-export type ScoreResult = { dimensions?: DimensionScore[]; gated: boolean; gate?: string; overall: number };
+export type ScoreResult = { dimensions?: DimensionScore[]; gated: boolean; gate?: string; gateDetail?: string; overall: number };
 
 /** Whether each dimension scores unchanged code the same on every run. Only nondeterministic margins are measured. */
 export const DETERMINISTIC: Record<string, boolean> = {
@@ -203,7 +203,7 @@ function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTest: string, 
 const streamlineLines = (log: string, kind: string) =>
   [...log.replaceAll("&#124;", "|").matchAll(new RegExp(`\\|DEBUG\\|${kind}\\|([^|]+)\\|(.*)$`, "gm"))].map((m) => [m[1], m[2]] as const);
 
-type VariantOutcome = { compiled: boolean; success: boolean };
+type VariantOutcome = { variant?: string; compiled: boolean; success: boolean; compileProblem?: string | null };
 
 /** An uncaught exception stops a variant before it logs its remaining tests, so each one counts as one failing test. */
 function streamlineTests(log: string, variants: VariantOutcome[]): TestSummary {
@@ -225,12 +225,22 @@ const unavailable = (name: string) => () => {
   throw new Error(`${name} is not available in streamline mode. Set its weight to 0.`);
 };
 
+type ComponentFailure = { fileName?: string; lineNumber?: number; problem?: string };
+
+function compileProblems(run: string, variants: VariantOutcome[], streamline: boolean): string {
+  if (streamline) {
+    return variants.filter((v) => !v.compiled).map((v) => `${v.variant}: ${v.compileProblem ?? "unknown"}`).join("; ");
+  }
+  const failures: ComponentFailure[] = [readJson(join(run, "deploy.json")).result?.details?.componentFailures ?? []].flat();
+  return failures.map((f) => `${f.fileName?.split("/").pop()}:${f.lineNumber} ${f.problem}`).join("; ");
+}
+
 export function scoreRun(opts: ScoreOptions): ScoreResult {
   const streamline = opts.mode === "streamline";
   const variants: VariantOutcome[] = streamline ? readJson(join(opts.run, "streamline.json")) : [];
   const compiled = streamline ? variants.every((v) => v.compiled) : readJson(join(opts.run, "deploy.json")).result?.success === true;
   if (!compiled) {
-    return { gated: true, gate: "compile", overall: 0 };
+    return { gated: true, gate: "compile", gateDetail: compileProblems(opts.run, variants, streamline), overall: 0 };
   }
   const enabled = enabledDimensions(opts.weights);
   if (enabled.length === 0) throw new Error("Every dimension has weight 0");

@@ -19,6 +19,7 @@ import {
   lastJson,
   loadConfig,
   loadHistory,
+  plateauDiscards,
   MCP_CONFIG,
   run,
   runDir,
@@ -111,7 +112,29 @@ The tests define the required behaviour, so the change must keep every test pass
 `;
 }
 
-function learnPrompt(entry: HistoryEntry, deltas: Record<string, number> | undefined, patch: string): string {
+/** Findings in one list and not the other, compared without line numbers and counting duplicates. */
+function findingsOnlyIn(these: string[], others: string[]): string[] {
+  const key = (f: string) => f.replace(/:\d+: /, ": ");
+  const counts = new Map<string, number>();
+  for (const f of others) counts.set(key(f), (counts.get(key(f)) ?? 0) + 1);
+  return these.filter((f) => {
+    const left = counts.get(key(f)) ?? 0;
+    counts.set(key(f), left - 1);
+    return left <= 0;
+  });
+}
+
+function findingChanges(config: AscentConfig, history: HistoryEntry[], entry: HistoryEntry): string {
+  if (!entry.run) return "";
+  const before = findings(scoreOptions(config, kept(history).at(-1)!.run!));
+  const after = findings(scoreOptions(config, entry.run));
+  const list = (items: string[]) => (items.length === 0 ? " none" : `\n${items.join("\n")}`);
+  return `New static analysis findings:${list(findingsOnlyIn(after, before))}
+Resolved static analysis findings:${list(findingsOnlyIn(before, after))}
+`;
+}
+
+function learnPrompt(entry: HistoryEntry, deltas: Record<string, number> | undefined, patch: string, changes: string): string {
   return `You are the learn step of one iteration of an ascent that improves Salesforce Apex code by hill climbing.
 Later plan steps read your learning before choosing their next candidate.
 
@@ -119,7 +142,7 @@ Plan: ${JSON.stringify({ reason: entry.reason, focus: entry.focus, edits: entry.
 Outcome: ${entry.outcome}
 Decision: ${(entry.decision ?? []).join("; ")}
 Score changes against the current kept state: ${JSON.stringify(deltas ?? {})}
-
+${changes}
 Diff:
 ${patch}
 
@@ -232,8 +255,8 @@ new Command()
           entry.decision = ["repeats a discarded change"];
         } else {
           const result = await collectAndScore(config, folder);
-          const current = kept(history).at(-1)!.scores!;
-          const decision = decide(current, bestScores(history), result, entry.focus, config.margins);
+          const current = kept(history).at(-1)!;
+          const decision = decide(current.scores!, bestScores(history), result, entry.focus, config.margins, current.overall);
           Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
           if (result.dimensions) entry.scores = scoresByName(result);
           entry.overall = result.overall;
@@ -260,7 +283,7 @@ new Command()
     if (entry.outcome === "keep" || entry.outcome === "discard" || entry.outcome === "gated") {
       try {
         const patch = readFileSync(entry.patch!, "utf8");
-        entry.learning = lastJson(runStep(config, folder, "learn", learnPrompt(entry, deltas, patch), entry), Learning).learning;
+        entry.learning = lastJson(runStep(config, folder, "learn", learnPrompt(entry, deltas, patch, findingChanges(config, history, entry)), entry), Learning).learning;
       } catch (error) {
         entry.decision = [...(entry.decision ?? []), `learn step failed: ${(error as Error).message}`];
       }
@@ -275,6 +298,13 @@ new Command()
     }
     const all = [...history, entry];
     const discards = consecutiveDiscards(all);
+    const plateau = plateauDiscards(all, config.margins);
+    const stopReason =
+      discards >= config.maxDiscards
+        ? `${discards} discards in a row`
+        : plateau >= config.plateauDiscards
+          ? `plateau: ${plateau} discards in a row whose focus did not rise by more than its margin`
+          : undefined;
     console.log(
       JSON.stringify(
         {
@@ -288,7 +318,9 @@ new Command()
           overall: entry.overall,
           deltas,
           consecutiveDiscards: discards,
-          stop: discards >= config.maxDiscards,
+          plateauDiscards: plateau,
+          stop: stopReason !== undefined,
+          stopReason,
           report: join(ascentDir(name), "report.html")
         },
         null,

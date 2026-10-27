@@ -141,6 +141,13 @@ describe("CLIs", () => {
     expect(result.learning).toBe("l");
   }, 60_000);
 
+  test("confirm deploys and scores the start and best kept commits with every default weight", () => {
+    const result = JSON.parse(cli("confirm.ts", "t"));
+    expect(result.confirmed).toBe(true);
+    expect(Object.keys(result.best.scores)).toContain("Code coverage");
+    expect(existsSync(join(ASCENT, "confirm/baseline/deploy.json"))).toBe(true);
+  }, 60_000);
+
   test("report writes the HTML report", () => {
     expect(cli("report.ts", "t").trim()).toBe(join(ASCENT, "report.html"));
     expect(readFileSync(join(ASCENT, "report.html"), "utf8")).toContain("<html");

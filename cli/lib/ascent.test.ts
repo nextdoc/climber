@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AscentConfig, consecutiveDiscards, decide, HistoryEntry } from "./ascent.ts";
+import { AscentConfig, consecutiveDiscards, decide, HistoryEntry, plateauDiscards } from "./ascent.ts";
 import { DIMENSION_NAMES, type ScoreResult } from "./scoring.ts";
 
 const baseline = Object.fromEntries(DIMENSION_NAMES.map((d) => [d, 50]));
@@ -43,8 +43,24 @@ describe("decide", () => {
     expect(decide(baseline, { ...baseline, "Graph Engine": 100 }, result, ["PMD"], margins).outcome).toBe("keep");
   });
 
-  test("reports a gated candidate", () => {
-    expect(decide(baseline, baseline, { gated: true, gate: "compile", overall: 0 }, ["PMD"], margins).outcome).toBe("gated");
+  test("reports a gated candidate with its detail", () => {
+    const result = decide(baseline, baseline, { gated: true, gate: "compile", gateDetail: "Unexpected token", overall: 0 }, ["PMD"], margins);
+    expect(result).toEqual({ outcome: "gated", reasons: ["gated by compile: Unexpected token"] });
+  });
+
+  test("keeps a missed focus when the overall rises by more than one dimension's margin can move it", () => {
+    const result = decide(baseline, baseline, { ...candidate({ PMD: 50.5, "Limit headroom": 60 }), overall: 51.5 }, ["PMD"], margins, 50);
+    expect(result.outcome).toBe("keep");
+    expect(result.reasons[0]).toContain("overall rose 1.5");
+  });
+
+  test("discards a missed focus when the overall rises within one dimension's margin", () => {
+    expect(decide(baseline, baseline, { ...candidate({ "Limit headroom": 51 }), overall: 50.1 }, ["PMD"], margins, 50).outcome).toBe("discard");
+  });
+
+  test("discards a rising overall when another dimension fell by more than its margin", () => {
+    const result = decide(baseline, baseline, { ...candidate({ "Limit headroom": 70, PMD: 45 }), overall: 52 }, ["Graph Engine"], margins, 50);
+    expect(result.outcome).toBe("discard");
   });
 });
 
@@ -54,6 +70,29 @@ describe("consecutiveDiscards", () => {
   test("counts non-keeps since the last keep and ignores dry runs", () => {
     const history = [entry("baseline"), entry("discard"), entry("keep"), entry("gated"), entry("discard", true), entry("rejected")];
     expect(consecutiveDiscards(history)).toBe(2);
+  });
+});
+
+describe("plateauDiscards", () => {
+  const entry = (outcome: HistoryEntry["outcome"], scores?: Record<string, number>): HistoryEntry => ({
+    iteration: 0,
+    at: "",
+    outcome,
+    dryRun: false,
+    focus: ["PMD"],
+    scores
+  });
+
+  test("counts discards whose focus missed its margin, skips unscored entries and stops at a focus that rose", () => {
+    const history = [
+      entry("baseline", baseline),
+      entry("discard", { ...baseline, PMD: 51 }),
+      entry("discard", { ...baseline, PMD: 60, "Graph Engine": 40 }),
+      entry("discard", { ...baseline, PMD: 50.5 }),
+      entry("gated"),
+      entry("discard", { ...baseline, PMD: 49 })
+    ];
+    expect(plateauDiscards(history, margins)).toBe(2);
   });
 });
 

@@ -57,6 +57,8 @@ const AscentFields = z.strictObject({
     .refine((t) => !t.holdout.some((c) => t.sample.includes(c)), "A test class cannot be in both sample and holdout"),
   steps: z.strictObject({ plan: Step, implement: Step, learn: Step, retro: Step.optional() }),
   maxDiscards: z.int().positive(),
+  /** Stops the ascent after this many discards in a row whose focus dimensions all failed to rise by more than their margins. */
+  plateauDiscards: z.int().positive().default(3),
   margins: ByDimension,
   weights: z.partialRecord(Dimension, z.number().nonnegative()).default({}),
   /** Lets the plan step run anonymous Apex probes with Streamline. Fixed per ascent so ascents with and without it can be compared. */
@@ -263,7 +265,7 @@ export async function collectAndScore(config: AscentConfig, folder: string): Pro
     } catch (error) {
       if (!(error instanceof ExtractError)) throw error;
       writeFileSync(join(folder, "extract-error.txt"), error.message);
-      return { gated: true, gate: "extract", overall: 0 };
+      return { gated: true, gate: "extract", gateDetail: error.message, overall: 0 };
     }
     await runVariants(MCP_CONFIG, config.targetOrg, folder, Object.keys(config.streamline!.variants));
   }
@@ -295,25 +297,46 @@ export function consecutiveDiscards(history: HistoryEntry[]): number {
   return count;
 }
 
+/** Trailing discards since the last keep in which no focus dimension rose by more than its margin. Unscored entries are skipped. */
+export function plateauDiscards(history: HistoryEntry[], margins: Record<string, number>): number {
+  const current = kept(history).at(-1)!.scores ?? {};
+  let count = 0;
+  for (const entry of history.filter((e) => !e.dryRun).reverse()) {
+    if (entry.outcome === "keep" || entry.outcome === "baseline") break;
+    if (entry.outcome !== "discard" || !entry.scores) continue;
+    const rose = (entry.focus ?? []).some((f) => entry.scores![f]! - current[f]! > (margins[f] ?? 0));
+    if (rose) break;
+    count++;
+  }
+  return count;
+}
+
 /**
  * The keep rule from doc/design.md: every focus dimension rises by more than its margin, no other dimension
- * falls by more than its margin, and no dimension drops below half its best score.
+ * falls by more than its margin, and no dimension drops below half its best score. A candidate whose only
+ * failure is a missed focus is still kept when the overall score rises by more than any one dimension's
+ * margin can move it.
  */
 export function decide(
   current: Record<string, number>,
   best: Record<string, number>,
   candidate: ScoreResult,
   focus: string[],
-  margins: Record<string, number>
+  margins: Record<string, number>,
+  currentOverall?: number
 ): { outcome: "keep" | "discard" | "gated"; reasons: string[] } {
-  if (candidate.gated) return { outcome: "gated", reasons: [`gated by ${candidate.gate}`] };
+  if (candidate.gated) {
+    const detail = candidate.gateDetail ? `: ${candidate.gateDetail}` : "";
+    return { outcome: "gated", reasons: [`gated by ${candidate.gate}${detail}`] };
+  }
   const scores = scoresByName(candidate);
+  const focusMisses: string[] = [];
   const reasons: string[] = [];
   for (const name of DIMENSION_NAMES.filter((d) => d in scores)) {
     const delta = scores[name] - current[name];
     const margin = margins[name] ?? 0;
     if (focus.includes(name) && !(delta > margin)) {
-      reasons.push(`${name} is a focus but rose ${delta.toFixed(1)}, not more than its margin ${margin}`);
+      focusMisses.push(`${name} is a focus but rose ${delta.toFixed(1)}, not more than its margin ${margin}`);
     }
     if (!focus.includes(name) && delta < -margin) {
       reasons.push(`${name} fell ${(-delta).toFixed(1)}, more than its margin ${margin}`);
@@ -322,7 +345,16 @@ export function decide(
       reasons.push(`${name} at ${scores[name]} is below half its best ${best[name]}`);
     }
   }
-  return reasons.length === 0
-    ? { outcome: "keep", reasons: ["every focus dimension rose and nothing else fell"] }
-    : { outcome: "discard", reasons };
+  if (reasons.length === 0 && focusMisses.length === 0) {
+    return { outcome: "keep", reasons: ["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"] };
+  }
+  const dimensions = candidate.dimensions ?? [];
+  const totalWeight = dimensions.reduce((sum, d) => sum + d.weight, 0);
+  const overallMargin = Math.max(0, ...dimensions.map((d) => (d.weight * (margins[d.name] ?? 0)) / totalWeight));
+  const overallRise = currentOverall === undefined ? 0 : candidate.overall - currentOverall;
+  if (reasons.length === 0 && overallRise > overallMargin) {
+    const overall = `overall rose ${overallRise.toFixed(1)}, more than its margin ${overallMargin.toFixed(1)}`;
+    return { outcome: "keep", reasons: [`${overall} and no dimension fell by more than its margin`, ...focusMisses] };
+  }
+  return { outcome: "discard", reasons: [...focusMisses, ...reasons] };
 }

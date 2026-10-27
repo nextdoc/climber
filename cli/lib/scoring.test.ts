@@ -22,7 +22,7 @@ const score = () =>
     runCounts: { "T.main": 3 }
   });
 
-const variants = (...v: { compiled: boolean; success: boolean }[]) => writeFileSync(join(RUN, "streamline.json"), JSON.stringify(v));
+const variants = (...v: { variant?: string; compiled: boolean; success: boolean; compileProblem?: string }[]) => writeFileSync(join(RUN, "streamline.json"), JSON.stringify(v));
 
 beforeEach(() => {
   rmSync(RUN, { recursive: true, force: true });
@@ -45,6 +45,6 @@ test("counts a variant with an uncaught exception as one failing test", () => {
 });
 
 test("gates on a variant that does not compile", () => {
-  variants({ compiled: true, success: true }, { compiled: false, success: false });
-  expect(score()).toEqual({ gated: true, gate: "compile", overall: 0 });
+  variants({ compiled: true, success: true }, { variant: "headroom", compiled: false, success: false, compileProblem: "Unexpected token" });
+  expect(score()).toEqual({ gated: true, gate: "compile", gateDetail: "headroom: Unexpected token", overall: 0 });
 });

@@ -135,7 +135,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 
 ### iterate
 
-`bun cli/iterate.ts <name>` runs one iteration: plan, implement, format, score, keep or discard, then learn. It prints a JSON summary, including `stop` when the ascent has reached its maximum consecutive discards.
+`bun cli/iterate.ts <name>` runs one iteration: plan, implement, format, score, keep or discard, then learn. It prints a JSON summary, including `stop` and `stopReason` when the ascent has reached `maxDiscards` consecutive discards, or `plateauDiscards` (default 3) consecutive discards whose focus dimensions did not rise by more than their margins.
 
 | Option | Default | Description |
 |---|---|---|
@@ -149,6 +149,15 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 | Option | Default | Description |
 |---|---|---|
 | `<name>` | required | Ascent name |
+
+### confirm
+
+`bun cli/confirm.ts <name>` deploys the ascent's start commit and its best kept commit to the target org, runs the sample and holdout tests, and scores both in deploy mode with the default weights. It writes `target/ascents/<name>/confirm.json` and exits 1 unless the best commit compiles and passes every test. Use it to confirm a streamline ascent before merging. It leaves the best kept code deployed.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `<name>` | required | Ascent name |
+| `--no-baseline` | off | Score only the best kept commit |
 
 ### retro
 
