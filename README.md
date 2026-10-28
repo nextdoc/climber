@@ -35,7 +35,6 @@ Prerequisites, with minimum versions where one matters and otherwise the version
 | [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (`sf`) | 2+ | Deploying, testing and querying the org |
 | Code Analyzer plugin | 5.0+ | PMD and Graph Engine scoring (`sf plugins install code-analyzer`). Version 4 used `sf scanner run`, which the scoring doesn't support |
 | Java | 11 or later | Required by the PMD and Graph Engine engines |
-| [jq](https://jqlang.org) | 1.8 | Parsing CLI output in `cli/score-prepare.sh` |
 | [Claude Code](https://claude.com/claude-code) (`claude`) | 2.1 | The default agent steps in `ascent.config.json` |
 
 A scratch org, and the Dev Hub to create it, is only needed if your project uses scratch orgs or to climb the included sample.

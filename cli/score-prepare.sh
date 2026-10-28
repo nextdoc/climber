@@ -12,16 +12,21 @@ DEBUG_LEVEL=ClimbScore
 rm -rf "$OUT"
 mkdir -p "$OUT/logs" target/tmp/code-analyzer/logs
 
+# Prints a JS expression evaluated against JSON on stdin as `d`, one line per array item. Exits 1 when it is null or undefined.
+json() {
+  bun -e "const d = await Bun.stdin.json(); const v = $1; if (v == null) process.exit(1); console.log(Array.isArray(v) ? v.join('\n') : v)"
+}
+
 tooling_query() {
-  sf data query -o "$ORG" --use-tooling-api --json -q "$1" | jq -r '.result.records[]?.Id'
+  sf data query -o "$ORG" --use-tooling-api --json -q "$1" | json 'd.result?.records?.map((r) => r.Id) ?? []'
 }
 
 # Compile gate: a failed deploy stops collection, and the scorer reports the gate from deploy.json.
 # Each worktree has its own source tracking, so org changes from other worktrees show as conflicts.
 if [ "${SKIP_DEPLOY:-}" != 1 ]; then
   sf project deploy start -o "$ORG" --source-dir force-app --ignore-conflicts --json > "$OUT/deploy.json"
-  jq -e '.result.success != null' "$OUT/deploy.json" > /dev/null || { jq -r '.message' "$OUT/deploy.json" >&2; exit 1; }
-  [ "$(jq -r '.result.success' "$OUT/deploy.json")" = "true" ] || exit 0
+  SUCCESS=$(json 'd.result?.success' < "$OUT/deploy.json") || { json 'd.message' < "$OUT/deploy.json" >&2; exit 1; }
+  [ "$SUCCESS" = "true" ] || exit 0
 fi
 
 [ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run --rule-selector pmd --target force-app --output-file "$OUT/pmd.json" || exit 1
@@ -35,10 +40,10 @@ if [ "${SKIP_LOGS:-}" != 1 ]; then
   if [ -z "$DEBUG_LEVEL_ID" ]; then
     DEBUG_LEVEL_ID=$(sf data create record -o "$ORG" --use-tooling-api --json -s DebugLevel \
       -v "DeveloperName=$DEBUG_LEVEL MasterLabel=$DEBUG_LEVEL ApexCode=ERROR ApexProfiling=INFO Database=NONE System=NONE Workflow=NONE Validation=NONE Callout=NONE Visualforce=NONE" \
-      | jq -r '.result.id')
+      | json 'd.result?.id')
   fi
-  USERNAME=$(sf org display -o "$ORG" --json | jq -r '.result.username')
-  USER_ID=$(sf data query -o "$ORG" --json -q "SELECT Id FROM User WHERE Username = '$USERNAME'" | jq -r '.result.records[0].Id')
+  USERNAME=$(sf org display -o "$ORG" --json | json 'd.result?.username')
+  USER_ID=$(sf data query -o "$ORG" --json -q "SELECT Id FROM User WHERE Username = '$USERNAME'" | json 'd.result?.records?.[0]?.Id')
   END=$(date -u -v+1H +%Y-%m-%dT%H:%M:%S.000Z)
   TRACE_FLAG_ID=$(tooling_query "SELECT Id FROM TraceFlag WHERE TracedEntityId = '$USER_ID' AND LogType = 'USER_DEBUG'")
   if [ -z "$TRACE_FLAG_ID" ]; then
@@ -52,7 +57,7 @@ fi
 
 # Failing tests exit non-zero, but still write results that the scorer needs.
 sf apex run test -o "$ORG" -n "$TEST_CLASSES" --code-coverage --result-format json -w 10 > "$OUT/tests.json"
-jq -e '.result.summary' "$OUT/tests.json" > /dev/null || exit 1
+json 'd.result?.summary' < "$OUT/tests.json" > /dev/null || exit 1
 [ "${SKIP_LOGS:-}" = 1 ] && exit 0
 
 # The test log can appear a few seconds after the run finishes.
