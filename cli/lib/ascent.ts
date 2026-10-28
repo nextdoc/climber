@@ -55,7 +55,7 @@ const AscentFields = z.strictObject({
       holdout: z.array(z.string().min(1))
     })
     .refine((t) => !t.holdout.some((c) => t.sample.includes(c)), "A test class cannot be in both sample and holdout"),
-  steps: z.strictObject({ plan: Step, implement: Step, learn: Step, retro: Step.optional() }),
+  steps: z.strictObject({ plan: Step, implement: Step, learn: Step, retro: Step.optional(), audit: Step.optional(), verify: Step.optional() }),
   maxDiscards: z.int().positive(),
   /** Stops the ascent after this many discards in a row whose focus dimensions all failed to rise by more than their margins. */
   plateauDiscards: z.int().positive().default(3),

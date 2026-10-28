@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anchor review</title>
+<style>
+:root{--surface:#fcfcfb;--raised:#f4f4f1;--text:#0b0b0b;--muted:#52514e;--grid:#e6e5e0;--accent:#2a78d6;--high:#b8433a;--medium:#c26a1b;--low:#8f8e89;--reproduced:#1f7a3d;--notrep:#8f8e89;--skipped:#b5b4ae;--error:#8e2a8e;--diff:#fff3c4;--unspecified:#b5b4ae;--gap:#8a6d1a;--light:#dcdad3;--light-text:#3a3936;--kind-B:#edf2fa;--kind-D:#f9eeec;--kind-U:#f8f3e6;--kind-T:#ecf5ef}
+@media (prefers-color-scheme:dark){:root{--surface:#1a1a19;--raised:#242423;--text:#fff;--muted:#c3c2b7;--grid:#383835;--accent:#3987e5;--high:#e0675d;--medium:#e08a3c;--low:#8f8e89;--reproduced:#4cc176;--notrep:#8f8e89;--skipped:#5e5d59;--error:#c565c5;--diff:#4a4120;--unspecified:#5e5d59;--gap:#a8892e;--light:#3a3936;--light-text:#e6e5e0;--kind-B:#1d242e;--kind-D:#2b2120;--kind-U:#2a261c;--kind-T:#1d2822}}
+body{margin:0;padding:24px 16px;background:var(--surface);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+main{max-width:1080px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+h2{font-size:14px;color:var(--muted);font-weight:600;margin:32px 0 10px}
+.meta{color:var(--muted);font-size:13px;margin-bottom:16px}
+code,pre{font:12px/1.4 ui-monospace,monospace}
+.summary{max-width:80ch;margin:0 0 20px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:8px}
+.tile{border:1px solid var(--grid);border-radius:10px;padding:12px 14px}
+.tile .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.tile .big{font-size:26px;font-weight:600;line-height:1.1}
+.tile .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.group{border-radius:14px;padding:4px 14px 2px;margin-top:20px}
+.group h2{margin:12px 0 10px;color:var(--text)}
+.finding{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:14px 16px;margin-bottom:12px;scroll-margin-top:12px}
+.finding:target{border-color:var(--accent)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px}
+.head .id{font:600 14px ui-monospace,monospace}
+.head .title{font-weight:600;font-size:15px;flex:1 1 40ch}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:500;color:#fff;white-space:nowrap}
+.pill.light{color:var(--light-text)}
+.detail{margin:8px 0 0;max-width:90ch}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media (max-width:640px){.pair{grid-template-columns:1fr}}
+.box{background:var(--raised);border-radius:8px;padding:8px 10px;min-width:0}
+.box .k,.k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.box pre{margin:0;white-space:pre-wrap;word-break:break-word}
+.box .changed{background:var(--diff);border-radius:3px}
+.section{margin-top:10px}
+.section ul{margin:2px 0 0;padding-left:18px}
+.refs{margin-top:10px;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.refs code{color:var(--text)}
+.problem{margin-top:10px;font-size:13px;color:var(--muted)}
+a{color:var(--accent)}
+.empty{color:var(--muted);padding:24px 16px;text-align:center;border:1px dashed var(--grid);border-radius:8px}
+.decide{margin-top:12px;padding-top:10px;border-top:1px solid var(--grid);display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.choices{display:inline-flex;border:1px solid var(--grid);border-radius:8px;overflow:hidden}
+.choices label{padding:4px 10px;font-size:13px;cursor:pointer;border-left:1px solid var(--grid)}
+.choices label:first-child{border-left:0}
+.choices input{position:absolute;opacity:0;pointer-events:none}
+.choices label:has(input:checked){background:var(--accent);color:#fff}
+.choices label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.decide input[type=text]{flex:1 1 30ch;min-width:0;padding:4px 8px;border:1px solid var(--grid);border-radius:6px;background:var(--surface);color:var(--text);font:13px system-ui,sans-serif}
+.bar{position:sticky;bottom:0;margin:24px -16px 0;padding:10px 16px;background:var(--surface);border-top:1px solid var(--grid);display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.bar button{padding:6px 12px;border-radius:6px;border:1px solid var(--grid);background:var(--raised);color:var(--text);font:13px system-ui,sans-serif;cursor:pointer}
+.bar button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.bar .status{color:var(--muted);font-size:13px}
+.bar textarea{flex:1 1 100%;height:120px;font:12px ui-monospace,monospace}
+</style>
+</head>
+<body><main>
+<h1 id="title"></h1>
+<div class="meta" id="meta"></div>
+<p class="summary" id="summary"></p>
+<div class="tiles" id="tiles"></div>
+<div id="groups"></div>
+<div class="bar">
+<span class="status" id="progress"></span>
+<button class="primary" id="copy">Copy decisions</button>
+<button id="clear">Clear decisions</button>
+<textarea id="fallback" readonly hidden></textarea>
+</div>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const KINDS = { B: 'Behaviour changes', D: 'Defects against the spec', U: 'Spec gaps', T: 'Test gaps' };
+const SEVERITY = ['high', 'medium', 'low'];
+const VERDICT_COLOR = { regression: 'high', fix: 'reproduced', unspecified: 'unspecified' };
+const STATUS_COLOR = { reproduced: 'reproduced', 'not reproduced': 'notrep', skipped: 'skipped', error: 'error' };
+
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const pill = (text, color) => {
+  const p = el('span', 'pill', text);
+  p.style.background = `var(--${color})`;
+  return p;
+};
+const num = (id) => Number(id.slice(1));
+
+function tile(label, big, sub) {
+  const t = el('div', 'tile');
+  t.append(el('div', 'label', label), el('div', 'big', String(big)));
+  if (sub) t.append(el('div', 'sub', sub));
+  return t;
+}
+
+function box(label, content) {
+  const b = el('div', 'box');
+  b.append(el('div', 'k', label));
+  if (typeof content === 'string') b.append(el('div', '', content));
+  else b.append(content);
+  return b;
+}
+
+/** The output as JSON, one top-level key per line, with keys whose value differs from the other version highlighted. */
+function output(value, other) {
+  const pre = el('pre');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    pre.textContent = JSON.stringify(value, null, 1);
+    return pre;
+  }
+  const keys = Object.keys(value).sort();
+  pre.append('{\n');
+  keys.forEach((k, i) => {
+    const line = el('span', JSON.stringify(value[k]) === JSON.stringify(other?.[k]) ? '' : 'changed', `  ${JSON.stringify(k)}: ${JSON.stringify(value[k])}`);
+    pre.append(line, i < keys.length - 1 ? ',\n' : '\n');
+  });
+  pre.append('}');
+  return pre;
+}
+
+function list(label, items) {
+  const s = el('div', 'section');
+  s.append(el('div', 'k', label));
+  const ul = el('ul');
+  for (const item of items) ul.append(el('li', '', item));
+  s.append(ul);
+  return s;
+}
+
+function refs(label, items, link) {
+  const span = el('span');
+  span.append(`${label}: `);
+  items.forEach((item, i) => {
+    if (i) span.append(', ');
+    if (link) {
+      const a = el('a', '', item);
+      a.href = `#${item}`;
+      span.append(a);
+    } else span.append(el('code', '', String(item)));
+  });
+  return span;
+}
+
+// The decisions each kind allows, with what each one tells the Apply agent to do.
+const OPTIONS = {
+  B: { preserve: 'A test pins the baseline behaviour', fix: 'A test pins the spec behaviour; the baseline is a bug', clarify: 'Edit the spec', reject: 'Drop the finding' },
+  D: { fix: 'Fix the defect, with a test', reject: 'Drop the finding' },
+  U: { clarify: 'Answer the spec question in the note', reject: 'Drop the finding' },
+  T: { 'add-test': 'Add the missing test', reject: 'Drop the finding' }
+};
+const STORE = 'anchor-review';
+
+// One review at a time: decisions saved for other findings are discarded.
+const decisions = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE));
+    return saved?.reviewId === DATA.reviewId ? saved.decisions : {};
+  } catch {
+    return {};
+  }
+})();
+
+function save() {
+  try {
+    localStorage.setItem(STORE, JSON.stringify({ reviewId: DATA.reviewId, decisions }));
+  } catch {}
+  progress();
+}
+
+function progress() {
+  const done = DATA.findings.filter((f) => decisions[f.id]?.decision).length;
+  document.getElementById('progress').textContent = `${done} of ${DATA.findings.length} decided`;
+}
+
+function decide(f) {
+  const d = el('div', 'decide');
+  const choices = el('div', 'choices');
+  choices.setAttribute('role', 'radiogroup');
+  for (const [value, help] of Object.entries(OPTIONS[f.kind])) {
+    const label = el('label');
+    label.title = help;
+    const input = el('input');
+    input.type = 'radio';
+    input.name = `decide-${f.id}`;
+    input.value = value;
+    input.checked = decisions[f.id]?.decision === value;
+    input.onchange = () => {
+      decisions[f.id] = { ...decisions[f.id], decision: value };
+      save();
+    };
+    label.append(input, value);
+    choices.append(label);
+  }
+  const note = el('input');
+  note.type = 'text';
+  note.placeholder = f.kind === 'U' ? 'Your answer to the spec question' : 'Note (optional)';
+  note.value = decisions[f.id]?.note ?? '';
+  note.oninput = () => {
+    decisions[f.id] = { ...decisions[f.id], note: note.value };
+    save();
+  };
+  d.append(choices, note);
+  return d;
+}
+
+function card(f) {
+  const c = el('article', 'finding');
+  c.id = f.id;
+  const head = el('div', 'head');
+  head.append(el('span', 'id', f.id), el('span', 'title', f.title), pill(f.severity, f.severity));
+  if (f.verdict) head.append(pill(f.verdict, VERDICT_COLOR[f.verdict]));
+  if (f.verify) head.append(pill(f.verify.status, STATUS_COLOR[f.verify.status]));
+  if (!f.caughtByTests) head.append(pill('not caught by tests', 'gap'));
+  if (!f.inAscent) {
+    const p = pill('present at baseline', 'light');
+    p.classList.add('light');
+    head.append(p);
+  }
+  c.append(head, el('p', 'detail', f.detail));
+
+  if (f.baseline || f.final) {
+    const pair = el('div', 'pair');
+    pair.append(box('Baseline', f.baseline ?? '—'), box('Final', f.final ?? '—'));
+    c.append(pair);
+  }
+
+  const t = f.proposedTest;
+  const test = el('div', 'section');
+  test.append(el('div', 'k', 'Proposed test'), el('div', '', t.scenario));
+  c.append(test);
+  if (t.seedData.length) c.append(list('Seed data', t.seedData));
+  const expected = el('div', 'section');
+  expected.append(el('div', 'k', `Expected (from ${t.expectedFrom})`), el('div', '', t.expected));
+  c.append(expected);
+
+  const v = f.verify;
+  if (v && (v.baseline !== undefined || v.final !== undefined)) {
+    const pair = el('div', 'pair');
+    pair.append(box('Verify: baseline output', output(v.baseline, v.final)), box('Verify: final output', output(v.final, v.baseline)));
+    c.append(pair);
+  }
+  if (v?.problem) c.append(el('div', 'problem', `Verify ${v.status}: ${v.problem}`));
+
+  const r = el('div', 'refs');
+  if (f.evidence.length) r.append(refs('Evidence', f.evidence));
+  if (f.specRefs.length) r.append(refs('Spec', f.specRefs));
+  if (f.iterations.length) r.append(refs('Iterations', f.iterations));
+  if (f.related.length) r.append(refs('Related', f.related, true));
+  c.append(r, decide(f));
+  return c;
+}
+
+document.getElementById('title').textContent = `Anchor review: ${DATA.name}`;
+document.getElementById('meta').textContent = `${DATA.findings.length} findings from ${DATA.source}`;
+document.getElementById('summary').textContent = DATA.summary;
+
+const tiles = document.getElementById('tiles');
+for (const [kind, label] of Object.entries(KINDS)) {
+  const of = DATA.findings.filter((f) => f.kind === kind);
+  const high = of.filter((f) => f.severity === 'high').length;
+  tiles.append(tile(`${kind} · ${label}`, of.length, `${high} high severity`));
+}
+const verified = DATA.findings.filter((f) => f.verify);
+if (verified.length) {
+  const count = (s) => verified.filter((f) => f.verify.status === s).length;
+  tiles.append(tile('Verify', `${count('reproduced')} / ${verified.length}`, `reproduced · ${count('not reproduced')} not reproduced · ${count('skipped')} skipped · ${count('error')} error`));
+}
+
+const groups = document.getElementById('groups');
+const byKind = Object.keys(KINDS).map((kind) => [
+  kind,
+  DATA.findings
+    .filter((f) => f.kind === kind)
+    .sort((a, b) => SEVERITY.indexOf(a.severity) - SEVERITY.indexOf(b.severity) || num(a.id) - num(b.id))
+]);
+for (const [kind, of] of byKind) {
+  const group = el('section', 'group');
+  group.style.background = `var(--kind-${kind})`;
+  group.append(el('h2', '', `${kind} · ${KINDS[kind]} (${of.length})`));
+  if (!of.length) group.append(el('div', 'empty', 'None'));
+  for (const f of of) group.append(card(f));
+  groups.append(group);
+}
+function exported() {
+  return {
+    reviewId: DATA.reviewId,
+    ascent: DATA.name,
+    decisions: DATA.findings
+      .filter((f) => decisions[f.id]?.decision)
+      .map((f) => ({ id: f.id, decision: decisions[f.id].decision, note: decisions[f.id].note || undefined }))
+  };
+}
+
+document.getElementById('copy').onclick = async () => {
+  const text = JSON.stringify(exported(), null, 2);
+  const fallback = document.getElementById('fallback');
+  try {
+    await navigator.clipboard.writeText(text);
+    fallback.hidden = true;
+    document.getElementById('progress').textContent += ' · copied, paste it into the chat';
+  } catch {
+    fallback.value = text;
+    fallback.hidden = false;
+    fallback.select();
+  }
+};
+document.getElementById('clear').onclick = () => {
+  if (!confirm('Clear every decision on this page?')) return;
+  for (const id of Object.keys(decisions)) delete decisions[id];
+  save();
+  for (const input of document.querySelectorAll('.decide input')) input.type === 'radio' ? (input.checked = false) : (input.value = '');
+};
+progress();
+</script>
+</body>
+</html>

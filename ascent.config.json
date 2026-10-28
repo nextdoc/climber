@@ -29,6 +29,14 @@
     "retro": {
       "model": "claude-opus-5-5",
       "command": "claude -p --output-format json --model \"$MODEL\" --allowedTools Read,Glob,Grep"
+    },
+    "audit": {
+      "model": "claude-opus-5-5",
+      "command": "claude -p --output-format json --model \"$MODEL\" --permission-mode acceptEdits --allowedTools Read,Write,\"Bash(bun cli/anchor.ts check-findings:*)\""
+    },
+    "verify": {
+      "model": "claude-sonnet-5-5",
+      "command": "claude -p --output-format json --model \"$MODEL\" --permission-mode acceptEdits --allowedTools Read,Write,\"Bash(bun cli/anchor.ts run-scenario:*)\",\"Bash(sf data query:*)\""
     }
   },
   "maxDiscards": 5,

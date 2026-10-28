@@ -6,6 +6,7 @@
 | Iteration | One pass of an ascent: plan a candidate, apply it, run, score, then keep or discard it. One CLI invocation runs one iteration. |
 | Agent step | One agent call within an iteration. Each has its own model and command under `steps` in the ascent config. The steps run in order: plan, implement, learn. |
 | Plan | The agent step that reads the scores, findings and history, then states the reason, focus and intended edits. It does not edit code. |
+| Probe | A small anonymous Apex script the plan step runs with Streamline's `runAndRollback` to answer a question before choosing a candidate, such as whether an approach compiles, what a query returns, or how many limits it uses. Enabled per ascent by `ascent-init --planner-streamline` (up to 5 per plan) and independent of the mode. An ascent with them enabled is said to use planner probes. |
 | Implement | The agent step that makes the planned edits to application files. |
 | Learn | The agent step that runs after the keep or discard decision. It reads the plan, the diff and the score changes, then writes one learning to the history. |
 | Candidate | The bundle of code edits an iteration tries, aimed at one weakness. |
@@ -31,3 +32,14 @@
 | Sample tests | Test classes the agent can read but not edit. Listed under `testClasses.sample` in the ascent config. |
 | Holdout | Test classes the agent can neither see nor edit. Listed under `testClasses.holdout` in the ascent config. They run and score with the sample tests. |
 | Application files | The Apex classes under improvement. Excludes test classes and test fixtures. |
+
+## Anchor
+
+Optional steps that turn one ascent's behaviour drift into fixed tests, code and spec, in order. An ascent runs the same with or without them. See [anchor.md](anchor.md#anchor).
+
+1. **Scout ascent.** Any completed ascent whose drift is used as the input to the anchor. Nothing marks an ascent as a scout in advance, so a first ascent run without an anchor can become a scout later.
+2. **Audit.** An agent step with a pre-built prompt compares the baseline code, the final code, the kept diffs, the tests and the spec, if there is one. It records findings in a Zod-validated JSON file.
+3. **Verify.** For each behaviour change, an agent writes seed data, and the harness runs the baseline and final classes on it in separate Streamline rollbacks and compares their outputs. Each finding gets a verify status of reproduced, not reproduced, skipped or error.
+4. **Decide.** The user reviews the findings on an HTML page and gives each one a decision from the options its kind allows: preserve, fix, clarify, add-test or reject.
+5. **Apply.** An agent writes the tests and spec edits the decisions call for. The next ascent measures its baseline with them.
+6. **Track.** Later ascents check whether the closed gaps stay closed.

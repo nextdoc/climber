@@ -18,11 +18,11 @@ An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura 
 
 - G1: Improve your code's performance across all of the weighted scoring dimensions.
 - G2: At the end of an ascent, give a retrospective of the features and gaps in your business domain logic. It draws on the changes and optimisations made and on what the agent steps observed, in particular the learnings recorded throughout the ascent.
+- G3: Improve correctness. The tool doesn't assume your code or tests are fully correct. An ascent exposes behaviour your tests don't pin and places where the code, tests or spec disagree, so you can fix them. See [doc/anchor.md](doc/anchor.md).
 
 ## Non-goals
 
-- NG1: Improving your business logic. A generic tool can't know what your business logic should be.
-- NG2: Guaranteeing that performance changes preserve your code's business behaviour. Your tests define the behaviour, and anything they don't cover can change.
+- NG1: Guaranteeing that performance changes preserve your code's business behaviour. Your tests define the behaviour, and anything they don't cover can change.
 
 ## Installation
 
@@ -47,6 +47,18 @@ npm ci
 sf org create scratch -f config/project-scratch-def.json -a climb-your-apex --target-dev-hub <dev hub alias>
 bun test ./cli
 ```
+
+## Process
+
+Instructions for an agent using this project. The terms are defined in the [glossary](doc/glossary.md).
+
+1. Install the prerequisites above and confirm `bun test ./cli` passes.
+2. Start an ascent with `bun cli/ascent-init.ts <name> -o <org>`. This scores the baseline.
+3. Run `bun cli/iterate.ts <name>` repeatedly until its summary reports `stop`.
+4. Write the retrospective with `bun cli/retro.ts <name>`, passing `-s <spec files>` when the project has a spec. In Streamline mode, run `bun cli/confirm.ts <name>` too.
+5. Show the user the report at `target/ascents/<name>/report.html`, then ask which path to take. Anchoring is optional.
+   - **Adopt.** Review the retrospective, merge the best kept commit, and adopt the learnings and proposed tests the user approves.
+   - **Anchor.** Treat the first ascent as the scout ascent and run the [anchor](doc/anchor.md#anchor) steps to fix the tests, code and spec. Then start a new ascent from the improved baseline.
 
 ## Dependencies
 
@@ -82,6 +94,8 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 | [Streamline](doc/streamline.md) | The two uses of Streamline: planner probes, and Streamline mode as a faster alternative to deploy mode. Draft. |
 | [Caveats](doc/caveats.md) | Known limits on what the scores mean. |
 | [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the sample class the ascents climb. |
+| [Anchor](doc/anchor.md) | The optional steps that fix tests, code and spec from a scout ascent's drift, and the sample's correctness inventory. |
+| [References](doc/references.md) | Public research on agent loops and prompt optimisation that the project draws on. |
 
 ## Files overview
 
@@ -169,6 +183,20 @@ The fixed shape makes ascents comparable, for example by the number and severity
 |---|---|---|
 | `<name>` | required | Ascent name |
 | `-s, --spec <files...>` | none | Requirement documents the code should meet, for example `doc/account-health-rollup.md` |
+
+### anchor
+
+`bun cli/anchor.ts <command>` groups the [anchor](doc/anchor.md#anchor) tools. Work in progress.
+
+`bun cli/anchor.ts audit <name> [-s <spec>]` writes the audit's inputs to `target/ascents/<name>/anchor/audit/input/`: the application classes at the baseline and final commits, the test classes and fixtures, the diff, the iterations and the spec. It then runs the audit agent step from [cli/prompts/anchor-audit.md](cli/prompts/anchor-audit.md), which writes `anchor/audit/findings.json`, and checks the result as `check-findings` does. `--no-agent` rewrites the inputs and checks the existing findings.
+
+`bun cli/anchor.ts check-findings <findings> -i <input dir>` validates an audit's findings JSON: its shape, ids and links, verdicts, and `file:line` references into the audit's input folder. It prints `{"ok": true, ...}` with the number of findings per kind, or the errors, and exits 1 on errors. The audit agent runs it on its own output until it passes.
+
+`bun cli/anchor.ts verify <name> [-f <findings>]` reproduces each behaviour change (B), by default from the findings `audit` wrote. It writes the baseline classes renamed with a `Baseline` suffix, the final classes and the fixtures to `target/ascents/<name>/anchor/verify/input/`, then runs the verify agent step from [cli/prompts/anchor-verify.md](cli/prompts/anchor-verify.md), which writes one scenario class per finding. Streamline runs each scenario on the baseline and the final code, and the harness compares their outputs. The findings, each with a verify status of reproduced, not reproduced, skipped or error, go to `target/ascents/<name>/anchor/findings.json`. `--no-agent` reruns the existing scenarios. Scratch orgs only.
+
+`bun cli/anchor.ts run-scenario <name> <ids...>` runs the given scenarios and prints both versions' outputs. The verify agent runs it on its own scenarios until they run.
+
+`bun cli/anchor.ts review <name> [-f <findings>] [--open]` writes the review page `target/ascents/<name>/anchor/review.html` from the findings `verify` wrote. Each finding has decision buttons for its kind, kept in browser storage until the findings change, and a button copies the decisions as JSON to paste into the chat. `--open` opens the page in the default browser.
 
 ### score-prepare and score
 
