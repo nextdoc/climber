@@ -182,7 +182,7 @@ const waiting = id => { document.getElementById(id).innerHTML = '<div class="emp
 const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Time since baseline (h:mm)',
   scale: {domain: [0, fiveMinutes.at(-1)], nice: false},
   axis: {values: fiveMinutes, labelExpr: `${minutes} % 15 ? '' : floor(${minutes} / 60) + ':' + pad(${minutes} % 60, 2, '0', 'left')`}};
-const ends = steps.length > 1 && steps.at(-1).current.toFixed(0) !== steps[0].current.toFixed(0)
+const ends = steps.length > 1 && steps.at(-1).current.toFixed(1) !== steps[0].current.toFixed(1)
   ? [[steps[0], 'left'], [steps.at(-1), 'right']] : [[steps.at(-1), 'left']];
 vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
   vconcat: [
@@ -193,7 +193,7 @@ vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', 
        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'fit', type: 'quantitative'}}},
       ...ends.map(([step, align]) => (
        {data: {values: [step]}, mark: {type: 'text', align, baseline: 'bottom', dy: -6, fontSize: 28, fontWeight: 600, color: css('--text')},
-        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'current', type: 'quantitative'}, text: {field: 'current', format: '.0f'}}})),
+        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'current', type: 'quantitative'}, text: {field: 'current', format: '.1f'}}})),
       {data: {values: withFocus(scored)}, mark: {type: 'point', size: 90, strokeWidth: 2, opacity: 1},
        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'overall', type: 'quantitative'},
                   color: outcome, shape: {field: 'outcome', legend: null},
