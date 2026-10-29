@@ -1,6 +1,6 @@
 # Climb Your Apex
 
-Agents improve Salesforce Apex code by hill climbing. Each iteration plans one change, implements it, and scores it on weighted dimensions that you control. It keeps the change only if the scores rise without anything regressing. The out-of-the-box dimensions:
+Agents improve Salesforce Apex code by hill climbing. The toolset is called climber for short. Each iteration plans one change, implements it, and scores it on weighted dimensions that you control. It keeps the change only if the scores rise without anything regressing. The out-of-the-box dimensions:
 
 - PMD: static analysis violations
 - Graph Engine: data flow and path analysis violations
