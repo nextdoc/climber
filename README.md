@@ -10,6 +10,8 @@ Agents improve Salesforce Apex code by hill climbing. Each iteration plans one c
 - Limit headroom: governor limit use for one batch of 200 records
 - Resource efficiency: governor limit use across the other tests
 
+To try it, follow the [quick start](#quick-start) to climb the included sample class in a scratch org.
+
 [![The report of a deploy-mode ascent of the sample class](doc/images/report.png)](https://nextdoc.github.io/climb-your-apex/account-health-deploy.html)
 
 The report of a deploy-mode ascent of the sample class. Click the image for the full report.
@@ -23,6 +25,20 @@ An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura 
 - G1: Improve your code's performance across all of the weighted scoring dimensions.
 - G2: At the end of an ascent, give a retrospective of the features and gaps in your business domain logic. It draws on the changes and optimisations made and on what the agent steps observed, in particular the learnings recorded throughout the ascent.
 - G3: Improve correctness. The tool doesn't assume your code or tests are fully correct. An ascent exposes behaviour your tests don't pin and places where the code, tests or spec disagree, so you can fix them. See [doc/anchor.md](doc/anchor.md).
+- G4: Improve code more reliably than an open-ended agent session, by making each practice below a property of the harness instead of something the agent has to remember. See [doc/benefits.md](doc/benefits.md) for how the tool delivers each one and the research behind it.
+  1. [Small, focused agent context](doc/benefits.md#1-small-focused-agent-context)
+  2. [Objective scoring, no self-grading](doc/benefits.md#2-objective-scoring-no-self-grading)
+  3. [Kept improvements cannot be lost](doc/benefits.md#3-kept-improvements-cannot-be-lost)
+  4. [Fresh attempts instead of commitment to one approach](doc/benefits.md#4-fresh-attempts-instead-of-commitment-to-one-approach)
+  5. [Each iteration is an experiment](doc/benefits.md#5-each-iteration-is-an-experiment)
+  6. [Protection against regressions](doc/benefits.md#6-protection-against-regressions)
+  7. [Learning accumulates, context does not](doc/benefits.md#7-learning-accumulates-context-does-not)
+  8. [Noise is not mistaken for progress](doc/benefits.md#8-noise-is-not-mistaken-for-progress)
+  9. [Small, attributable changes](doc/benefits.md#9-small-attributable-changes)
+  10. [Stop at any time](doc/benefits.md#10-stop-at-any-time)
+  11. [Bounded, unattended runs](doc/benefits.md#11-bounded-unattended-runs)
+  12. [Cheaper models, any agent CLI](doc/benefits.md#12-cheaper-models-any-agent-cli)
+  13. [Progress at a glance](doc/benefits.md#13-progress-at-a-glance)
 
 ## Non-goals
 
@@ -41,21 +57,43 @@ Prerequisites, with minimum versions where one matters and otherwise the version
 | Java | 11 or later | Required by the PMD and Graph Engine engines |
 | [Claude Code](https://claude.com/claude-code) (`claude`) | 2.1 | The default agent steps in `ascent.config.json` |
 
-A scratch org, and the Dev Hub to create it, is only needed if your project uses scratch orgs or to climb the included sample.
-
 ```sh
 git clone https://github.com/nextdoc/climb-your-apex.git
 cd climb-your-apex
 npm ci
-sf org create scratch -f config/project-scratch-def.json -a climb-your-apex --target-dev-hub <dev hub alias>
-bun test ./cli
 ```
+
+## Quick start
+
+Climb the included sample class, `AccountHealthRollup`, and watch the report. The ascent in the image took 14 iterations, 0.8 hours and $11.26 in agent calls.
+
+1. Follow the [installation](#installation) steps.
+2. Create a scratch org for the sample, using your Dev Hub:
+
+   ```sh
+   sf org create scratch -f config/project-scratch-def.json -a climb-your-apex --target-dev-hub <dev hub alias>
+   ```
+
+3. Start an ascent. This scores the baseline and writes the report.
+
+   ```sh
+   bun cli/ascent-init.ts sample-1 -o climb-your-apex
+   open target/ascents/sample-1/report.html
+   ```
+
+4. Run iterations until the summary reports `"stop": true`, and refresh the report after each one to watch the climb. To run them unattended, ask your agent to run the command repeatedly until it reports stop.
+
+   ```sh
+   bun cli/iterate.ts sample-1
+   ```
+
+The [Process](#process) section covers the retrospective and what to do after an ascent.
 
 ## Process
 
 Instructions for an agent using this project. The terms are defined in the [glossary](doc/glossary.md).
 
-1. Install the prerequisites above and confirm `bun test ./cli` passes.
+1. Install the prerequisites above.
 2. Start an ascent with `bun cli/ascent-init.ts <name> -o <org>`. This scores the baseline.
 3. Run `bun cli/iterate.ts <name>` repeatedly until its summary reports `stop`.
 4. Write the retrospective with `bun cli/retro.ts <name>`, passing `-s <spec files>` when the project has a spec. In Streamline mode, run `bun cli/confirm.ts <name>` too.
