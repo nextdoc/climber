@@ -1,5 +1,6 @@
 import {
   ApexErrorListener,
+  ApexLexer,
   ApexParserFactory,
   type ApexToken,
   type ApexTokenStream,
@@ -206,8 +207,54 @@ export const TRANSFORMS: Transform[] = [
   dropLeadingComments
 ];
 
-/** Adapts one Apex type file for the CLASSES section of an anonymous Apex script. */
-export function extract(file: string, text: string, transforms: Transform[] = TRANSFORMS): { code: string; applied: string[] } {
+const isNestedClass = (member: ClassBodyDeclarationContext) =>
+  Boolean(member.memberDeclaration()?.classDeclaration() || member.memberDeclaration()?.interfaceDeclaration());
+
+/**
+ * Splits nested classes and interfaces out into their own top-level types, since anonymous Apex cannot nest types.
+ * Rewrites Outer.Inner references to Inner and drops private and protected, which a top-level type cannot have.
+ */
+export function hoistNestedClasses(file: string, text: string): string[] {
+  let source = parseType(file, text);
+  const nested = members(source).filter(isNestedClass);
+  if (nested.length === 0) return [text];
+  const declared = (m: ClassBodyDeclarationContext) => m.memberDeclaration()!.classDeclaration() ?? m.memberDeclaration()!.interfaceDeclaration()!;
+  const names = new Set(nested.map((m) => declared(m).id().getText().toLowerCase()));
+  const owner = className(source).toLowerCase();
+  const tokens = defaultTokens(source);
+  const unqualify = tokens.flatMap((t, i) =>
+    t.text.toLowerCase() === owner && tokens[i + 1]?.text === "." && names.has(tokens[i + 2]?.text.toLowerCase() ?? "")
+      ? [{ start: t.start, end: tokens[i + 2].start, text: "" }]
+      : []
+  );
+  source = parseType(file, applyEdits(source.text, unqualify));
+  const hoisted = members(source)
+    .filter(isNestedClass)
+    .map((member) => {
+      const modifiers = member.modifier_list().filter((m) => !m.PRIVATE() && !m.PROTECTED() && !m.STATIC());
+      const declaration = member.memberDeclaration()!;
+      return [...modifiers, declaration].map((c) => source.text.slice(c.start.start, c.stop!.stop + 1)).join(" ") + "\n";
+    });
+  const outer = applyEdits(source.text, members(source).filter(isNestedClass).map((m) => removeMember(source, m)));
+  return [...hoisted, outer];
+}
+
+/** Drops comments, indentation and blank lines, so a composed script fits the anonymous Apex size limit. */
+export function stripComments(text: string): string {
+  const comments = new Set([ApexLexer.COMMENT, ApexLexer.DOC_COMMENT, ApexLexer.LINE_COMMENT]);
+  const code = ApexParserFactory.createLexer(text)
+    .getAllTokens()
+    .filter((t) => !comments.has(t.type))
+    .map((t) => t.text)
+    .join("");
+  return code
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+function transform(file: string, text: string, transforms: Transform[]): { code: string; applied: string[] } {
   let source = parseType(file, text);
   const applied: string[] = [];
   for (const transform of transforms) {
@@ -217,4 +264,12 @@ export function extract(file: string, text: string, transforms: Transform[] = TR
     applied.push(transform.name);
   }
   return { code: source.text, applied };
+}
+
+/** Adapts one Apex type file for the CLASSES section of an anonymous Apex script. */
+export function extract(file: string, text: string, transforms: Transform[] = TRANSFORMS): { code: string; applied: string[] } {
+  const types = hoistNestedClasses(file, text);
+  const results = types.map((t) => transform(file, t, transforms));
+  const applied = [...new Set(results.flatMap((r) => r.applied))];
+  return { code: results.map((r) => r.code).join("\n"), applied: types.length > 1 ? ["hoist-nested-classes", ...applied] : applied };
 }

@@ -69,10 +69,15 @@ A script has three sections:
 
 | Transform | Change |
 |---|---|
-| `reject-unsupported` | Fails on nested types, static initializers and static non-final fields. Anonymous Apex cannot hold them and no rewrite keeps their meaning. |
+| `hoist-nested-classes` | Moves nested classes and interfaces to the top level, since anonymous Apex cannot nest types. Rewrites `Outer.Inner` to `Inner` and drops `private` and `protected`. Runs before the other transforms. |
+| `reject-unsupported` | Fails on nested enums, static initializers and static non-final fields. Anonymous Apex cannot hold them and no rewrite keeps their meaning. |
 | `drop-uncalled-static-methods` | Drops static methods the class never calls, such as `@InvocableMethod` entry points. |
 | `static-to-instance` | Makes the remaining static methods and constants instance members, and drops annotations that require static. Fails when the class calls one as `ClassName.member`. |
 | `drop-virtual-class` | Drops the `virtual` class modifier, since anonymous Apex classes are virtual by default. |
+| `drop-sharing` | Drops `with`, `without` and `inherited sharing`, which anonymous Apex classes do not allow. They run with the running user's sharing. |
+| `drop-leading-comments` | Drops comments before the class. |
+
+Composition then strips comments, indentation and blank lines from the classes and scenarios, so the script fits the size limit. Streamline rejects scripts over about 32k characters with "Script too large", and it counts the 4 spaces it adds to each line of flow code. The `.cls` files keep their comments.
 
 `AccountHealthRollup` loses only `rateAll`. `Fixtures` is copied unchanged.
 
@@ -148,6 +153,14 @@ The same code, scored both ways with coverage and run time at weight 0:
 | Overall | 40.7 | 47.2 |
 
 CPU time is about 30% lower in Streamline. Scores within one ascent stay comparable, but scores cannot be compared across modes.
+
+### Another repo
+
+`ascent-init --repo <path>` climbs classes in another git repo. The worktree is created from that repo, at `<repo>/target/worktrees/<name>`. Ascent records, prompts, Prettier, the Code Analyzer config and `.mcp.json` stay in this repo, and PMD and Graph Engine analyse only the application classes.
+
+- The scenarios file must be committed in the target repo, because runs read it from the worktree. The ascent defaults file can live anywhere, since `-c` reads it once at init.
+- `Type.forName` cannot see classes declared in anonymous Apex, and calling a deployed `@IsTest` class from anonymous Apex fails with "Cannot call test methods in non-test context". Scenarios that need a class by name, such as a step the code under test instantiates, need a deployed non-test copy.
+- When the modular compile fails, Streamline retries the script in flow mode, which hides the real compile error. A comment above `// === CLASSES ===` also forces flow mode.
 
 ### Limits
 

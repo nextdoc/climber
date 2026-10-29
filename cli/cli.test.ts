@@ -15,8 +15,8 @@ const FAKE_SF = `#!/usr/bin/env bash
 echo "$*" >> "$FAKE/calls.log"
 case "$*" in
   "project deploy start"*) echo '{"result":{"success":true}}' ;;
-  "code-analyzer run --rule-selector pmd"*) cp "$FAKE/pmd.json" "\${@: -1}" ;;
-  "code-analyzer run --rule-selector sfge"*) cp "$FAKE/sfge.json" "\${@: -1}" ;;
+  "code-analyzer run"*"--rule-selector pmd"*) cp "$FAKE/pmd.json" "\${@: -1}" ;;
+  "code-analyzer run"*"--rule-selector sfge"*) cp "$FAKE/sfge.json" "\${@: -1}" ;;
   "apex run test"*) cat "$FAKE/tests.json" ;;
   "apex get log"*) cp "$FAKE/test.log" "\${@: -1}/test.log" ;;
   "org display"*) echo '{"result":{"username":"u"}}' ;;

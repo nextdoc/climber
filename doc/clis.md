@@ -10,6 +10,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 |---|---|---|
 | `<name>` | required | Ascent name, used for the branch and the worktree |
 | `-o, --target-org <org>` | required | Org alias or username to deploy and test in |
+| `-r, --repo <path>` | this repo | Git repo whose classes to climb. The worktree is created from it at `<repo>/target/worktrees/<name>` ([Streamline](streamline.md#another-repo)) |
 | `--from <ref>` | `HEAD` | Commit the ascent starts from |
 | `-c, --config <file>` | `ascent.config.json` | Ascent defaults to start from |
 

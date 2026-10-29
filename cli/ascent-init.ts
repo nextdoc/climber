@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Command, Option } from "commander";
 import {
   appendHistory,
@@ -19,13 +19,14 @@ import {
 } from "./lib/ascent.ts";
 import { writeReport } from "./lib/report.ts";
 
-type Options = { targetOrg: string; from: string; config: string; plannerStreamline: boolean; mode: "deploy" | "streamline" };
+type Options = { repo: string; targetOrg: string; from: string; config: string; plannerStreamline: boolean; mode: "deploy" | "streamline" };
 
 new Command()
   .name("ascent-init")
   .description("Start an ascent: create its branch and worktree, then score the baseline")
   .argument("<name>", "ascent name, used for the branch ascent/<name> and the worktree")
   .requiredOption("-o, --target-org <org>", "org alias or username to deploy and test in")
+  .option("-r, --repo <path>", "git repo whose classes to climb; the worktree is created from it", REPO_ROOT)
   .option("--from <ref>", "commit the ascent starts from", "HEAD")
   .option("-c, --config <file>", "ascent defaults to start from", join(REPO_ROOT, "ascent.config.json"))
   .addOption(
@@ -40,13 +41,15 @@ new Command()
       if (!existsSync(MCP_CONFIG)) throw new Error(`Streamline needs its server in ${MCP_CONFIG}`);
       assertScratchOrg(opts.targetOrg);
     }
+    const repo = resolve(opts.repo);
     const branch = `ascent/${name}`;
-    const worktree = join(REPO_ROOT, "target/worktrees", name);
-    const baseCommit = git(REPO_ROOT, "rev-parse", opts.from);
+    const worktree = join(repo, "target/worktrees", name);
+    const baseCommit = git(repo, "rev-parse", opts.from);
     const defaults = AscentDefaults.parse(JSON.parse(readFileSync(opts.config, "utf8")));
     const config = AscentConfig.parse({
       ...defaults,
       name,
+      repo,
       branch,
       worktree,
       targetOrg: opts.targetOrg,
@@ -59,12 +62,12 @@ new Command()
       createdAt: new Date().toISOString(),
       baseCommit
     });
-    const files = git(REPO_ROOT, "ls-tree", "-r", "--name-only", baseCommit, "--", "force-app").split("\n");
+    const files = git(repo, "ls-tree", "-r", "--name-only", baseCommit, "--", "force-app").split("\n");
     const missing = [...config.testClasses.sample, ...config.testClasses.holdout].filter(
       (c) => !files.some((f) => f.endsWith(`/classes/${c}.cls`))
     );
     if (missing.length > 0) throw new Error(`Test classes not found at ${baseCommit}: ${missing.join(", ")}`);
-    git(REPO_ROOT, "worktree", "add", "-b", branch, worktree, baseCommit);
+    git(repo, "worktree", "add", "-b", branch, worktree, baseCommit);
     saveConfig(config);
     formatApp(config);
     if (git(worktree, "status", "--porcelain") !== "") {

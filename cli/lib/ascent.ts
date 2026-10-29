@@ -7,6 +7,8 @@ import { ExtractError } from "./extract.ts";
 import { DIMENSION_NAMES, scoreRun, weightOf, type ScoreOptions, type ScoreResult } from "./scoring.ts";
 import { runVariants } from "./streamline.ts";
 
+export const REPO_ROOT = resolve(import.meta.dirname, "../..");
+
 const Dimension = z.enum(DIMENSION_NAMES as [string, ...string[]]);
 
 /** One number for every dimension, keyed by dimension name. */
@@ -42,6 +44,8 @@ export type StreamlineConfig = z.infer<typeof StreamlineConfig>;
 
 const AscentFields = z.strictObject({
   name: z.string().min(1),
+  /** The git repo whose classes the ascent climbs. The worktree is created from it. Records, prompts and tooling stay in REPO_ROOT. */
+  repo: z.string().min(1).default(REPO_ROOT),
   branch: z.string().min(1),
   worktree: z.string().min(1),
   targetOrg: z.string().min(1),
@@ -81,6 +85,7 @@ export type AscentConfig = z.infer<typeof AscentConfig>;
 /** The committed ascent.config.json: an ascent config without the fields that belong to one ascent. */
 export const AscentDefaults = AscentFields.omit({
   name: true,
+  repo: true,
   branch: true,
   worktree: true,
   targetOrg: true,
@@ -124,8 +129,6 @@ export const HistoryEntry = z.strictObject({
 });
 
 export type HistoryEntry = z.infer<typeof HistoryEntry>;
-
-export const REPO_ROOT = resolve(import.meta.dirname, "../..");
 
 /** Holds the Streamline server. Gitignored, so worktrees lack it and the plan step is pointed at this one. */
 export const MCP_CONFIG = join(REPO_ROOT, ".mcp.json");
@@ -221,7 +224,9 @@ export function formatApp(config: AscentConfig) {
   const files = [...editableFiles(config)].filter((f) => f.endsWith(".cls") && existsSync(join(config.worktree, f)));
   if (files.length === 0) return;
   // The worktree sits under target/, which .gitignore excludes, and Prettier honours .gitignore by default.
-  const result = run(join(REPO_ROOT, "node_modules/.bin/prettier"), ["--write", "--ignore-path=", ...files], config.worktree);
+  // Our config carries the Apex plugin, which another repo's config may lack, and Prettier resolves plugins from its cwd.
+  const args = ["--write", "--ignore-path=", `--config=${join(REPO_ROOT, ".prettierrc")}`, ...files.map((f) => join(config.worktree, f))];
+  const result = run(join(REPO_ROOT, "node_modules/.bin/prettier"), args, REPO_ROOT);
   if (result.status !== 0) throw new Error(`prettier failed: ${result.stderr.trim()}`);
 }
 
@@ -249,7 +254,10 @@ export async function collectAndScore(config: AscentConfig, folder: string): Pro
   const prepare = join(REPO_ROOT, "cli/score-prepare.sh");
   const classes = [...config.testClasses.sample, ...config.testClasses.holdout].join(",");
   const off = (...names: string[]) => (names.every((n) => weightOf(config.weights, n) === 0) ? "1" : "");
+  const appClasses = [...editableFiles(config)].filter((f) => f.endsWith(".cls"));
   const result = run(prepare, [config.targetOrg, folder, classes], config.worktree, undefined, {
+    ANALYZER_CONFIG: join(REPO_ROOT, "code-analyzer.yml"),
+    ANALYZER_TARGETS: appClasses.join(","),
     SKIP_DEPLOY: streamline ? "1" : "",
     SKIP_PMD: off("PMD"),
     SKIP_SFGE: off("Graph Engine"),

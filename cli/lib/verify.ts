@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { ascentDir, editableFiles, git, MCP_CONFIG, REPO_ROOT, type AscentConfig } from "./ascent.ts";
 import { promptText, type Finding } from "./audit.ts";
-import { extract } from "./extract.ts";
+import { extract, stripComments } from "./extract.ts";
 import { runVariants, type VariantResult } from "./streamline.ts";
 
 export const VERIFY_PROMPT = join(REPO_ROOT, "cli/prompts/anchor-verify.md");
@@ -68,8 +68,8 @@ export function verifyPrompt(name: string): string {
 /** One script per scenario and version, so each version runs in its own transaction with its own governor limits. */
 export function scenarioScript(classes: string, scenarios: string, id: string, version: Version): string {
   return `// === CLASSES ===
-${classes}
-${scenarios}
+${stripComments(classes)}
+${stripComments(scenarios)}
 // === CODE ===
 Scenario_${id} s = new Scenario_${id}();
 s.seed();

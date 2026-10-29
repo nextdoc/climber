@@ -29,8 +29,15 @@ if [ "${SKIP_DEPLOY:-}" != 1 ]; then
   [ "$SUCCESS" = "true" ] || exit 0
 fi
 
-[ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run --rule-selector pmd --target force-app --output-file "$OUT/pmd.json" || exit 1
-[ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run --rule-selector sfge --workspace force-app --output-file "$OUT/sfge.json" || exit 1
+# ANALYZER_TARGETS, comma-separated files, scopes the analysis to the climbed classes. ANALYZER_CONFIG keeps the rules
+# the same whichever repo the worktree comes from.
+TARGETS=()
+IFS=, read -ra FILES <<< "${ANALYZER_TARGETS:-force-app}"
+for f in "${FILES[@]}"; do TARGETS+=(--target "$f"); done
+CONFIG=()
+[ -n "${ANALYZER_CONFIG:-}" ] && CONFIG=(--config-file "$ANALYZER_CONFIG")
+[ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector pmd "${TARGETS[@]}" --output-file "$OUT/pmd.json" || exit 1
+[ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector sfge --workspace force-app "${TARGETS[@]}" --output-file "$OUT/sfge.json" || exit 1
 [ "${SKIP_TESTS:-}" = 1 ] && exit 0
 
 # Logs only profiling, which holds the TESTING_LIMITS blocks the scorer reads.
