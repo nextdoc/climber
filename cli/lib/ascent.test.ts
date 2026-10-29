@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AscentConfig, consecutiveDiscards, decide, HistoryEntry, plateauDiscards } from "./ascent.ts";
+import { AscentConfig, atSummit, consecutiveDiscards, decide, HistoryEntry, plateauDiscards } from "./ascent.ts";
 import { DIMENSION_NAMES, type ScoreResult } from "./scoring.ts";
 
 const baseline = Object.fromEntries(DIMENSION_NAMES.map((d) => [d, 50]));
@@ -93,6 +93,16 @@ describe("plateauDiscards", () => {
       entry("discard", { ...baseline, PMD: 49 })
     ];
     expect(plateauDiscards(history, margins)).toBe(2);
+  });
+});
+
+describe("atSummit", () => {
+  test("is true only when every dimension is within its margin of 100", () => {
+    const margins = { PMD: 0.5, "Limit headroom": 3, "Tests passing": 0 };
+    expect(atSummit({ PMD: 100, "Limit headroom": 99, "Tests passing": 100 }, margins)).toBe(true);
+    expect(atSummit({ PMD: 99.5, "Limit headroom": 97, "Tests passing": 100 }, margins)).toBe(true);
+    expect(atSummit({ PMD: 100, "Limit headroom": 96, "Tests passing": 100 }, margins)).toBe(false);
+    expect(atSummit({ PMD: 100, "Limit headroom": 100, "Tests passing": 99 }, margins)).toBe(false);
   });
 });
 

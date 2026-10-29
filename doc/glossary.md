@@ -3,7 +3,7 @@
 | Term | Meaning |
 |---|---|
 | Climber | The short name for this toolset: the CLIs, prompts and scoring that run ascents. Also used as an adjective, as in a climber ascent or climber config. |
-| Ascent | The loop of iterations from a baseline: each one tries a candidate, scores it, and keeps or discards it. It ends after K consecutive discards, after a plateau of discards whose focus did not rise by more than its margin, or when stopped. |
+| Ascent | The loop of iterations from a baseline: each one tries a candidate, scores it, and keeps or discards it. It ends when every dimension is within its margin of 100, after K consecutive discards, after a plateau of discards whose focus did not rise by more than its margin, or when stopped. |
 | Iteration | One pass of an ascent: plan a candidate, apply it, run, score, then keep or discard it. One CLI invocation runs one iteration. |
 | Agent step | One agent call within an iteration. Each has its own model and command under `steps` in the ascent config. The steps run in order: plan, implement, learn. |
 | Plan | The agent step that reads the scores, findings and history, then states the reason, focus and intended edits. It does not edit code. |

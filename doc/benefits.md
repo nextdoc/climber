@@ -110,7 +110,7 @@ Evidence:
 
 ## 11. Bounded, unattended runs
 
-`bun cli/iterate.ts <name>` runs one iteration and reports `stop` when the ascent reaches `maxDiscards` discards in a row, or `plateauDiscards` discards in a row whose focus did not rise by more than its margins. Run it repeatedly until it stops, without supervision. Each iteration is bounded to one plan of 1 to 6 edits, and the history records each step's model, duration and cost.
+`bun cli/iterate.ts <name>` runs one iteration and reports `stop` when every dimension is within its margin of 100, when the ascent reaches `maxDiscards` discards in a row, or `plateauDiscards` discards in a row whose focus did not rise by more than its margins. Run it repeatedly until it stops, without supervision. Each iteration is bounded to one plan of 1 to 6 edits, and the history records each step's model, duration and cost.
 
 Evidence:
 

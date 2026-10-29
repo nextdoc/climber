@@ -16,7 +16,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 
 ## iterate
 
-`bun cli/iterate.ts <name>` runs one iteration: plan, implement, format, score, keep or discard, then learn. It prints a JSON summary, including `stop` and `stopReason` when the ascent has reached `maxDiscards` consecutive discards, or `plateauDiscards` (default 3) consecutive discards whose focus dimensions did not rise by more than their margins.
+`bun cli/iterate.ts <name>` runs one iteration: plan, implement, format, score, keep or discard, then learn. It prints a JSON summary, including `stop` and `stopReason` when every dimension is within its margin of 100 (the summit, where no candidate can be kept), when the ascent has reached `maxDiscards` consecutive discards, or `plateauDiscards` (default 3) consecutive discards whose focus dimensions did not rise by more than their margins.
 
 | Option | Default | Description |
 |---|---|---|

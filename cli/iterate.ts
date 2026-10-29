@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   appendHistory,
   ascentDir,
+  atSummit,
   bestScores,
   ClaudeResult,
   classFiles,
@@ -299,8 +300,9 @@ new Command()
     const all = [...history, entry];
     const discards = consecutiveDiscards(all);
     const plateau = plateauDiscards(all, config.margins);
-    const stopReason =
-      discards >= config.maxDiscards
+    const stopReason = atSummit(kept(all).at(-1)!.scores!, config.margins)
+      ? "summit: every dimension is within its margin of 100"
+      : discards >= config.maxDiscards
         ? `${discards} discards in a row`
         : plateau >= config.plateauDiscards
           ? `plateau: ${plateau} discards in a row whose focus did not rise by more than its margin`

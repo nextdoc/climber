@@ -319,6 +319,11 @@ export function plateauDiscards(history: HistoryEntry[], margins: Record<string,
   return count;
 }
 
+/** True when no dimension can rise by more than its margin, so no candidate can be kept. */
+export function atSummit(scores: Record<string, number>, margins: Record<string, number>): boolean {
+  return Object.entries(scores).every(([d, score]) => 100 - score <= (margins[d] ?? 0));
+}
+
 /**
  * The keep rule from doc/design.md: every focus dimension rises by more than its margin, no other dimension
  * falls by more than its margin, and no dimension drops below half its best score. A candidate whose only
