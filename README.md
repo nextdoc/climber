@@ -10,6 +10,10 @@ Agents improve Salesforce Apex code by hill climbing. Each iteration plans one c
 - Limit headroom: governor limit use for one batch of 200 records
 - Resource efficiency: governor limit use across the other tests
 
+[![The report of a deploy-mode ascent of the sample class](doc/images/report.png)](https://nextdoc.github.io/climb-your-apex/account-health-deploy.html)
+
+The report of a deploy-mode ascent of the sample class. Click the image for the full report.
+
 The project comes with a sample class, `AccountHealthRollup`, and its test, `AccountHealthRollupTest`. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
 
 An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura components, or other JavaScript code.
@@ -40,7 +44,7 @@ Prerequisites, with minimum versions where one matters and otherwise the version
 A scratch org, and the Dev Hub to create it, is only needed if your project uses scratch orgs or to climb the included sample.
 
 ```sh
-git clone <repo url> climb-your-apex
+git clone https://github.com/nextdoc/climb-your-apex.git
 cd climb-your-apex
 npm ci
 sf org create scratch -f config/project-scratch-def.json -a climb-your-apex --target-dev-hub <dev hub alias>
