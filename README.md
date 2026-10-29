@@ -78,7 +78,7 @@ Climb the included sample class, `AccountHealthRollup`, and watch the report. Th
 
    ```sh
    bun cli/ascent-init.ts sample-1 -o climb-your-apex
-   open target/ascents/sample-1/report.html
+   open target/ascents/sample-1/report.html   # macOS. Use xdg-open on Linux or start on Windows.
    ```
 
 4. Run iterations until the summary reports `"stop": true`, and refresh the report after each one to watch the climb. To run them unattended, ask your agent to run the command repeatedly until it reports stop.
@@ -94,7 +94,7 @@ The [Process](#process) section covers the retrospective and what to do after an
 Instructions for an agent using this project. The terms are defined in the [glossary](doc/glossary.md).
 
 1. Install the prerequisites above.
-2. Start an ascent with `bun cli/ascent-init.ts <name> -o <org>`. This scores the baseline.
+2. Start an ascent with `bun cli/ascent-init.ts <name> -o <org>`. This scores the baseline. Open `target/ascents/<name>/report.html` in the operating system's default browser so the user can watch the climb.
 3. Run `bun cli/iterate.ts <name>` repeatedly until its summary reports `stop`.
 4. Write the retrospective with `bun cli/retro.ts <name>`, passing `-s <spec files>` when the project has a spec. In Streamline mode, run `bun cli/confirm.ts <name>` too.
 5. Show the user the report at `target/ascents/<name>/report.html`, then ask which path to take. Anchoring is optional.
