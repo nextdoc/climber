@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ascent report</title>
+<script src="https://cdn.jsdelivr.net/npm/vega@5.30.0/build/vega.min.js" integrity="sha384-em7CHpJd+SsMugVFf6TY7AKQcLWMcbPhD84hmNK8o6WFDkK+2uHSUQRVQV1/w827" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5.21.0/build/vega-lite.min.js" integrity="sha384-GhkD6ks9/zgY1m5EFOUZWz/vMVMUFF/92DL61RZc+B42J8osL+jNufKv68bNHHZ2" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6.26.0/build/vega-embed.min.js" integrity="sha384-TqXb8su49m5OnEpKGO8m+VrgHesrUxyP22HgpXi4hnh1Hm43dXroiSYemNf5D8lv" crossorigin="anonymous"></script>
+<style>
+:root{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e6e5e0;--keep:#2a78d6;--discard:#8f8e89;--gated:#c26a1b;--rejected:#b8433a;--nochange:#b5b4ae;--error:#8e2a8e;--up:#1f7a3d;--down:#b8433a}
+@media (prefers-color-scheme:dark){:root{--surface:#1a1a19;--text:#fff;--muted:#c3c2b7;--grid:#383835;--keep:#3987e5;--discard:#8f8e89;--gated:#e08a3c;--rejected:#e0675d;--nochange:#5e5d59;--error:#c565c5;--up:#4cc176;--down:#e0675d}}
+body{margin:0;padding:24px 16px;background:var(--surface);color:var(--text);font:14px/1.4 system-ui,sans-serif}
+main{max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+.meta{color:var(--muted);font-size:13px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.meta b{color:var(--text);font-weight:500}
+code{font:12px ui-monospace,monospace}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px;margin-bottom:24px}
+.card{border:1px solid var(--grid);border-radius:10px;padding:14px 16px;display:flex;gap:16px;align-items:center}
+.card svg.graphic{flex:none}
+.card > div{min-width:0}
+.card .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:6px}
+.card .big{font-size:28px;font-weight:600;line-height:1.1}
+.card .sub{color:var(--muted);font-size:13px;margin-top:4px}
+.card .row{margin-top:4px;font-size:13px}
+.card .row svg{vertical-align:-3px;margin-right:6px;color:var(--muted)}
+.card .row svg[width="10"]{vertical-align:-1px}
+h2{font-size:14px;color:var(--muted);font-weight:600;margin:28px 0 8px}
+.chart{width:100%}
+.empty{color:var(--muted);padding:32px 16px;text-align:center;border:1px dashed var(--grid);border-radius:8px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{color:var(--muted);font-weight:600;text-align:left;font-size:12px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--grid);vertical-align:top}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.up{color:var(--up)}.down{color:var(--down)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:500;color:#fff;white-space:nowrap}
+.tag{display:inline-block;margin-top:4px;padding:0 6px;border:1px solid var(--grid);border-radius:4px;font-size:11px;color:var(--muted)}
+.focus{color:var(--muted);font-size:12px}
+.notes p{margin:0 0 6px}.notes p:last-child{margin:0}
+.notes .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-right:6px}
+.deltas{white-space:nowrap}
+a{color:var(--keep)}
+.refresh{position:fixed;top:12px;right:16px;color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px;background:var(--surface);padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body><main>
+<label class="refresh"><input type="checkbox" id="refresh"> Refresh every minute</label>
+<script>
+// The setting lives in the query string so it survives the reload, including from a file:// URL.
+{
+  const box = document.getElementById('refresh');
+  box.checked = new URLSearchParams(location.search).get('refresh') !== 'off';
+  if (box.checked) setTimeout(() => location.reload(), 60000);
+  box.onchange = () => { location.search = box.checked ? '' : '?refresh=off'; };
+}
+</script>
+<h1 id="title"></h1>
+<div class="meta" id="meta"></div>
+<div class="tiles" id="tiles"></div>
+<h2>Overall score by hours since baseline: current kept (line), fitted climb (dashed)</h2>
+<div class="chart" id="climb"></div>
+<h2>Minutes per iteration</h2>
+<div class="chart" id="durations"></div>
+<h2>Dimensions</h2>
+<div class="scroll"><table id="dimensions"></table></div>
+<h2>Iterations</h2>
+<div class="scroll"><table id="iterations"></table></div>
+<h2 id="cost-title">Cumulative agent cost by step</h2>
+<div class="chart" id="cost"></div>
+<section id="retro" hidden>
+<h2>Retrospective (first pass, agent generated)</h2>
+<p class="meta" id="retro-meta"></p>
+<p id="retro-summary"></p>
+<div class="scroll"><table id="retro-items"></table></div>
+</section>
+</main>
+<script>
+const data = {"ascent":{"name":"account-health-deploy","mode":"deploy","plannerStreamline":true,"targetOrg":"climb-your-apex","branch":"ascent/account-health-deploy","baseCommit":"81d8b3e5d950acd18a98f8b5ad2fa94194656764","createdAt":"2026-10-27T08:37:42.299Z","updatedAt":"2026-10-27T09:28:36.667Z"},"summary":{"baseline":51.7,"current":89.8,"gain":38.1,"iterations":14,"kept":6,"hours":0.85,"perHour":30.75,"perIteration":2.72,"angle":69.8,"minutesPerIteration":3.5,"fit":[{"hours":0.0848,"fit":72.91},{"hours":0.7632,"fit":93.77}]},"cost":{"total":11.26,"byStep":{"plan":8.05,"implement":2.3,"learn":0.92},"series":[{"hours":0,"step":"plan","usd":0},{"hours":0,"step":"implement","usd":0},{"hours":0,"step":"learn","usd":0},{"hours":0.075,"step":"plan","usd":0.2875},{"hours":0.075,"step":"implement","usd":0.1946},{"hours":0.075,"step":"learn","usd":0.0683},{"hours":0.117,"step":"plan","usd":0.565},{"hours":0.117,"step":"implement","usd":0.3881},{"hours":0.117,"step":"learn","usd":0.1361},{"hours":0.16,"step":"plan","usd":0.9858},{"hours":0.16,"step":"implement","usd":0.5294},{"hours":0.16,"step":"learn","usd":0.1942},{"hours":0.226,"step":"plan","usd":1.6072},{"hours":0.226,"step":"implement","usd":0.6989},{"hours":0.226,"step":"learn","usd":0.2688},{"hours":0.292,"step":"plan","usd":2.205},{"hours":0.292,"step":"implement","usd":0.889},{"hours":0.292,"step":"learn","usd":0.3407},{"hours":0.342,"step":"plan","usd":2.6907},{"hours":0.342,"step":"implement","usd":1.0444},{"hours":0.342,"step":"learn","usd":0.4026},{"hours":0.411,"step":"plan","usd":3.3141},{"hours":0.411,"step":"implement","usd":1.2288},{"hours":0.411,"step":"learn","usd":0.4695},{"hours":0.485,"step":"plan","usd":4.1358},{"hours":0.485,"step":"implement","usd":1.3924},{"hours":0.485,"step":"learn","usd":0.5359},{"hours":0.547,"step":"plan","usd":4.7553},{"hours":0.547,"step":"implement","usd":1.5641},{"hours":0.547,"step":"learn","usd":0.6041},{"hours":0.635,"step":"plan","usd":5.6644},{"hours":0.635,"step":"implement","usd":1.7288},{"hours":0.635,"step":"learn","usd":0.6714},{"hours":0.695,"step":"plan","usd":6.256},{"hours":0.695,"step":"implement","usd":1.8891},{"hours":0.695,"step":"learn","usd":0.7376},{"hours":0.726,"step":"plan","usd":6.7817},{"hours":0.726,"step":"implement","usd":2.0266},{"hours":0.726,"step":"learn","usd":0.7955},{"hours":0.784,"step":"plan","usd":7.2856},{"hours":0.784,"step":"implement","usd":2.1632},{"hours":0.784,"step":"learn","usd":0.8541},{"hours":0.848,"step":"plan","usd":8.046},{"hours":0.848,"step":"implement","usd":2.2995},{"hours":0.848,"step":"learn","usd":0.9153}]},"dimensions":[{"name":"PMD","baseline":30.1,"current":100,"delta":69.9,"margin":0.5,"series":[30.1,34.2,40.3,65.8,100,100,100]},{"name":"Graph Engine","baseline":25.3,"current":100,"delta":74.7,"margin":0.5,"series":[25.3,26.9,51,100,100,100,100]},{"name":"Tests passing","baseline":100,"current":100,"delta":0,"margin":0,"series":[100,100,100,100,100,100,100]},{"name":"Code coverage","baseline":100,"current":100,"delta":0,"margin":0,"series":[100,100,100,100,100,100,100]},{"name":"Test run time","baseline":42.4,"current":49.6,"delta":7.2,"margin":3,"series":[42.4,50.1,50,52.3,51.9,52,49.6]},{"name":"Limit headroom","baseline":13.9,"current":97.2,"delta":83.3,"margin":3,"series":[13.9,93.8,93.8,93.8,93.8,93.8,97.2]},{"name":"Resource efficiency","baseline":50,"current":82,"delta":32,"margin":1,"series":[50,68.4,68.4,68.4,68.4,74.8,82]}],"rows":[{"iteration":1,"at":"2026-10-27T08:39:24.267Z","outcome":"keep","dryRun":false,"overall":67.6,"current":67.6,"hours":0.075,"minutes":2.8,"focus":["Limit headroom","Resource efficiency","Graph Engine"],"reason":"CPU peaks at 86% of the limit (Limit headroom 13.9) because processAccounts rescans every opportunity and every task for each account. createFollowUpTask also runs one SOQL query and one insert per account, which drives the 53% query usage and two Graph Engine AvoidDatabaseOperationInLoop findings (lines 208 and 222). Single-pass maps plus one bulk follow-up query and one insert remove the nested scans and the per-account database work, and they also lower the cognitive and cyclomatic complexity of processAccounts. Behaviour is unchanged.","decision":["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"],"learning":"Replacing nested scans and per-account SOQL/DML with single-pass maps and one bulk query and insert gave large Limit headroom and Resource efficiency gains. It moved PMD and Graph Engine only slightly, because processAccounts stays one big method with high complexity and NCSS, and Graph Engine still flags the bulk query and insert in createFollowUpTasks as in a loop through the caller's loop at line 36. Further structural gains need smaller extracted methods and a look at that outer loop, not more bulkification.","deltas":{"PMD":4.1,"Graph Engine":1.6,"Tests passing":0,"Code coverage":0,"Test run time":7.7,"Limit headroom":79.9,"Resource efficiency":18.4},"patch":"patches/1.patch","run":"runs/1","cost":{"plan":0.2874538,"implement":0.1945603,"learn":0.0683216}},{"iteration":2,"at":"2026-10-27T08:42:11.422Z","outcome":"keep","dryRun":false,"overall":71.9,"current":71.9,"hours":0.117,"minutes":2.6,"focus":["Graph Engine","PMD"],"reason":"Graph Engine flags all five database operations as inside the SOQL for-loop at line 36, because that loop wraps processAccounts. The class also declares no sharing model, which adds six DatabaseOperationsMustUseWithSharing findings and one PMD ApexSharingViolations finding. Querying the accounts once into a list and calling processAccounts once removes the loop context. Declaring 'with sharing' clears the sharing findings. Removing the two System.debug calls clears four PMD findings, and escaping the filter values targets ApexSOQLInjection. Moving the opportunity and task aggregation out of processAccounts brings its NCSS, cognitive and cyclomatic complexity under the PMD thresholds. Behaviour is unchanged.","decision":["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"],"learning":"Structural fixes (with sharing, removing the for-loop wrapper, dropping System.debug) clear whole classes of Graph Engine and PMD findings cheaply, but extracting a method only moves complexity: class totals stay about the same and the new method inherits findings (cognitive 16 vs 15, cyclomatic 10, 4-parameter list). When extracting, return a single result instead of filling passed-in maps, and split the branching into a helper so the extracted method stays under the thresholds.","deltas":{"PMD":6.1,"Graph Engine":24.1,"Tests passing":0,"Code coverage":0,"Test run time":-0.1,"Limit headroom":0,"Resource efficiency":0},"patch":"patches/2.patch","run":"runs/2","cost":{"plan":0.2775508,"implement":0.19351420000000003,"learn":0.0677856}},{"iteration":3,"at":"2026-10-27T08:44:44.967Z","outcome":"keep","dryRun":false,"overall":82.9,"current":82.9,"hours":0.16,"minutes":2.5,"focus":["PMD","Graph Engine"],"reason":"The 5 remaining PMD ApexCRUDViolation findings (lines 100, 116, 168, 258, 285) and all 6 Graph Engine ApexFlsViolation findings (lines 40, 100, 116, 168, 258, 285) come from database operations that run in system mode without CRUD/FLS checks. Running every query and DML in user mode enforces CRUD and FLS, which both rules recognise. Trimming each query to the fields the code reads shrinks the checked field sets. Tests run as the running user, which has full access, so behaviour is unchanged.","decision":["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"],"learning":"Enforcing user mode (WITH USER_MODE, AccessLevel.USER_MODE, as user) plus trimming queries to the fields actually read clears PMD ApexCRUDViolation and Graph Engine ApexFlsViolation findings together without affecting tests, coverage, limit headroom or resource efficiency, so security-annotation edits are safe, targeted levers for the static-analysis dimensions only and further headroom/efficiency gains must come from structural changes.","deltas":{"PMD":25.5,"Graph Engine":49,"Tests passing":0,"Code coverage":0,"Test run time":2.3,"Limit headroom":0,"Resource efficiency":0},"patch":"patches/3.patch","run":"runs/3","cost":{"plan":0.4208194,"implement":0.14128400000000002,"learn":0.0581216}},{"iteration":4,"at":"2026-10-27T08:47:17.132Z","outcome":"discard","dryRun":false,"overall":84.9,"current":82.9,"hours":0.226,"minutes":4,"focus":["PMD"],"reason":"The 7 PMD findings are all about complexity: the extracted sumOpportunities has 4 parameters, cognitive complexity 16 and cyclomatic complexity 10, calculateRating has cyclomatic complexity 10, the class totals are cognitive 55 (threshold 50) and cyclomatic 48 (reported at 40 or more), and the class has no ApexDoc. Returning one result object from sumOpportunities, starting each account's totals at 0, replacing the null last-activity date with a large 'no activity' day count, moving the task filters and ordering into SOQL, and building id sets from Map keySets removes about 10 decision points (estimated class cyclomatic about 38, every method at most 9, class cognitive well under 50). The tighter task query also returns fewer rows. Behaviour is unchanged.","decision":["Graph Engine fell 19.4, more than its margin 0.5","Code coverage fell 0.9, more than its margin 0"],"learning":"Replacing hand-built id sets with Map.keySet() produced MissingNullCheckOnSoqlVariable findings from Graph Engine, so complexity refactors that touch SOQL bind variables risk costing more in Graph Engine than they gain in PMD. Keep ids in an explicitly built or null-checked Set, and expect coverage to fall when guards and branches are removed without adding tests.","deltas":{"PMD":34.2,"Graph Engine":-19.4,"Tests passing":0,"Code coverage":-0.9,"Test run time":-0.2,"Limit headroom":0,"Resource efficiency":0},"patch":"patches/4.patch","run":"runs/4","cost":{"plan":0.6213736,"implement":0.1695431,"learn":0.07460960000000001}},{"iteration":5,"at":"2026-10-27T08:51:15.014Z","outcome":"keep","dryRun":false,"overall":87.7,"current":87.7,"hours":0.292,"minutes":4,"focus":["PMD"],"reason":"All 7 PMD findings are about complexity or ApexDoc. The class has no ApexDoc. sumOpportunities has 4 parameters, cognitive complexity 16 and cyclomatic complexity 10. calculateRating has cyclomatic complexity 10. The class totals are cognitive 55 (limit 50) and cyclomatic 48 (reported at 40 or more). Holding the won-revenue, open-pipeline and last-activity maps in instance fields, seeded in processAccounts' existing account loop (0 for revenue, a 1900-01-01 sentinel date for last activity), removes the 4-parameter list, the 4 null-default ternaries, the null last-activity ternary and 3 null checks. Moving the Completed/ActivityDate filter and ascending ordering into the task SOQL removes 2 if statements and their && and || operators. Estimated class cyclomatic is about 36, every method is at most 8, and class cognitive is well under 50. The accountIdByOpportunityId keySet binding stays as it is, so Graph Engine should be unaffected. Every new line runs on the tested paths, so coverage should hold, and the tighter task query returns fewer rows. Behaviour is unchanged: a missing activity date still gives Cold and still needs follow-up when open pipeline is above 0, and the latest completed date is still used.","decision":["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"],"learning":"PMD complexity findings (cyclomatic, cognitive, parameter count) fall when branches, null checks and parameters are removed, e.g. by moving filter and sort into SOQL, using instance-field maps and a non-null sentinel date, while Graph Engine, limit headroom and coverage stay flat because query and DML shape and tested paths are unchanged. Only changes to database operations move those dimensions.","deltas":{"PMD":34.2,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":-0.4,"Limit headroom":0,"Resource efficiency":0},"patch":"patches/5.patch","run":"runs/5","cost":{"plan":0.5977656,"implement":0.1901237,"learn":0.07186759999999999}},{"iteration":6,"at":"2026-10-27T08:55:14.143Z","outcome":"keep","dryRun":false,"overall":88.7,"current":88.7,"hours":0.342,"minutes":3,"focus":["Resource efficiency"],"reason":"Resource efficiency (68.4) is now the weakest dimension that can still move, and SOQL usage (43% of the limit) is its biggest part. Each run issues 4 queries: accounts, opportunities, completed tasks, and open follow-up tasks. A probe showed that an Account query with both an Opportunities subquery and a Tasks subquery counts as 1 SOQL query, runs in user mode, and counts the same rows. Moving the opportunity query and the open follow-up task check into the account query cuts each run from 4 queries to 2, which should cut SOQL usage roughly in half. It also removes 2 database operations that Graph Engine and PMD would otherwise check. Behaviour is unchanged: the opportunity totals are the same, and an existing open task whose Subject exactly equals 'Re-engage ' + acc.Name still stops a duplicate follow-up. Only the extra rows from open 'Re-engage %' tasks on accounts that don't need follow-up are new, and that is minor.","decision":["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"],"learning":"Folding sibling queries into Account subqueries (Opportunities and open Tasks) lowers SOQL query count and so moves Resource efficiency, while PMD, Graph Engine, coverage and Limit headroom stay flat because rows read and CPU work are unchanged. Further Resource efficiency gains must come from fewer rows, fewer DML statements or heap use, not from restructuring the same work.","deltas":{"PMD":0,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":0.1,"Limit headroom":0,"Resource efficiency":6.4},"patch":"patches/6.patch","run":"runs/6","cost":{"plan":0.4857159999999999,"implement":0.15538280000000002,"learn":0.0619216}},{"iteration":7,"at":"2026-10-27T08:58:13.500Z","outcome":"discard","dryRun":false,"overall":88.1,"current":88.7,"hours":0.411,"minutes":4.2,"focus":["Resource efficiency"],"reason":"Resource efficiency (74.8) is now the weakest dimension that can still move. Its parts are 2 SOQL queries per run (22%), query rows (16.4%), 2 DML statements (13.3%) and DML rows (5.7%). The separate completed-task query reads every completed task on the accounts and their opportunities, but the code only needs the latest date. Probes showed that one Account query can hold three things and still counts as 1 SOQL query in user mode: an Opportunities subquery with a nested Tasks subquery ('Status = Completed AND ActivityDate != NULL ORDER BY ActivityDate DESC LIMIT 1'), an account-level Tasks subquery with the same filter and LIMIT 1, and an OpenActivities subquery for open 'Re-engage %' tasks. That leaves 1 query per run, and each parent returns at most 1 completed-task row instead of all of them, so SOQL count and query rows both drop sharply. Writing back only accounts whose Rating changed, and skipping the update when none did, lowers DML rows and statements on reruns. The task SOQL goes away, so PMD and Graph Engine have one less database operation to check, and accountIdByOpportunityId and its keySet bind disappear. Behaviour is unchanged: last activity is still the latest completed dated task on the account or any of its opportunities (NO_ACTIVITY when there is none), and an open task whose Subject exactly equals 'Re-engage ' + acc.Name still stops a duplicate.","decision":["PMD fell 7.4, more than its margin 0.5","Test run time fell 7.6, more than its margin 3"],"learning":"Moving the completed-task lookup into nested subqueries raised Resource efficiency and Limit headroom, but the extra method and branches (recordActivity, rating-changed guard, isEmpty check) pushed class cyclomatic complexity back over PMD's threshold of 40 and slowed tests. Next efficiency changes must be complexity-neutral: inline the activity loop, and skip the changed-rating and empty-update guards whose small DML savings add branches.","deltas":{"PMD":-7.4,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":-7.6,"Limit headroom":3.4,"Resource efficiency":7.6},"patch":"patches/7.patch","run":"runs/7","cost":{"plan":0.6234594,"implement":0.1844328,"learn":0.06686160000000001}},{"iteration":8,"at":"2026-10-27T09:02:22.749Z","outcome":"discard","dryRun":false,"overall":88.6,"current":88.7,"hours":0.485,"minutes":4.5,"focus":["Resource efficiency","Limit headroom"],"reason":"Resource efficiency (74.8) is the weakest dimension that can still move. Each run issues 2 SOQL queries (22%) and about 3,100 query rows for 200 accounts, about 1,950 of them completed tasks (10 per bulk account) when only the latest date is needed. A probe confirmed that one user-mode Account query can hold: Opportunities filtered to Amount != NULL AND StageName != 'Closed Lost', each with a nested Tasks subquery for its latest completed task (LIMIT 1); an account-level Tasks subquery with the same filter and LIMIT 1; and an OpenActivities subquery for open 'Re-engage %' tasks. It counted as 1 query, and each parent returned at most 1 completed-task row. That roughly halves SOQL usage and cuts query rows by more than half, and Limit headroom's peak (query rows) drops too. Iteration #7 failed PMD because it added a method and guards. This plan is complexity-negative: findLastActivity is deleted (with its query, loop and ternary), the Opportunities filter removes the Amount null checks and the Closed Won/Closed Lost comparisons, and the update stays unconditional. No method is added. Estimated class cyclomatic falls from about 40 to about 36. Behaviour is unchanged: won revenue still needs IsWon, CloseDate >= today-365 and a non-null Amount, pipeline still needs not won, not Closed Lost and a non-null Amount, last activity is still the latest completed dated task on the account or any of its opportunities (NO_ACTIVITY if none), and an open task whose Subject exactly equals 'Re-engage ' + acc.Name still stops a duplicate.","decision":["PMD fell 7.4, more than its margin 0.5","Test run time fell 3.8, more than its margin 3"],"learning":"Consolidating queries via nested subqueries improves Resource efficiency and Limit headroom, but the Apex that consumes the nested results must stay under PMD's per-method cognitive limit of 15. Putting the nested task loop and comparison inside sumOpportunities took it to 18, which cost PMD and test run time more than the efficiency gains were worth. Move such logic into a small separate method, or cut branches from sumOpportunities, and check per-method limits, not only the class total.","deltas":{"PMD":-7.4,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":-3.8,"Limit headroom":3.4,"Resource efficiency":7.2},"patch":"patches/8.patch","run":"runs/8","cost":{"plan":0.8216152000000001,"implement":0.1635374,"learn":0.0664096}},{"iteration":9,"at":"2026-10-27T09:06:50.125Z","outcome":"keep","dryRun":false,"overall":89.8,"current":89.8,"hours":0.547,"minutes":3.7,"focus":["Resource efficiency"],"reason":"Resource efficiency (74.8) is the weakest dimension that can still move. Each run issues 2 SOQL queries (22%) and reads every completed task (about 1,950 of the roughly 3,100 query rows for 200 accounts), but the code only needs the latest date. A probe confirmed that one user-mode Account query can hold Opportunities with a nested latest-completed-Task subquery (LIMIT 1), an account-level latest-completed-Task subquery (LIMIT 1) and an OpenActivities subquery for open 'Re-engage %' tasks. That counts as 1 SOQL query and returns at most 1 completed-task row per parent, so SOQL usage roughly halves and query rows drop sharply, which also lowers the Limit headroom peak (query rows). Iterations #7 and #8 failed PMD by adding branches: #7 added a method plus guards, and #8 nested a loop in sumOpportunities, taking it to cognitive 18. This plan lowers complexity: findLastActivity (cyclomatic 3: query, loop, ternary) is deleted, and the only addition is a branch-free helper with one loop (cyclomatic 2). The latest date comes from sorting a per-account date list seeded with NO_ACTIVITY, so no if or comparison is needed. sumOpportunities gains only a method call, so its cognitive complexity is unchanged. accountIdByOpportunityId, its keySet bind and the accountIds set go away. There is no Opportunities WHERE filter, so tasks on Closed Lost opportunities still count, and the update stays unconditional. Behaviour is unchanged: last activity is still the latest completed dated task on the account or any of its opportunities (NO_ACTIVITY when there is none), and an open activity whose Subject exactly equals 'Re-engage ' + acc.Name still stops a duplicate.","decision":["every focus dimension rose by more than its margin and no other dimension fell by more than its margin"],"learning":"Pushing aggregation into SOQL (nested LIMIT 1 subqueries, folded into the parent Account query) is what moves Resource efficiency and Limit headroom, since it cuts query count and rows. Keeping the added Apex branch-free keeps PMD, Graph Engine and coverage flat, and the only cost seen was a small test-run-time rise.","deltas":{"PMD":0,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":-2.4,"Limit headroom":3.4,"Resource efficiency":7.2},"patch":"patches/9.patch","run":"runs/9","cost":{"plan":0.6195233999999998,"implement":0.1717611,"learn":0.0681876}},{"iteration":10,"at":"2026-10-27T09:10:30.336Z","outcome":"discard","dryRun":false,"overall":89,"current":89.8,"hours":0.635,"minutes":5.3,"focus":["Resource efficiency"],"reason":"Resource efficiency (82) is the weakest dimension that can still move. Its cost is SOQL 11%, query rows 7.4%, DML statements 13.3% and DML rows 5.7%, summed over the tests. SOQL is already 1 query per run, so this plan cuts rows and DML instead, without raising complexity. (1) A probe showed Account.LastActivityDate already includes completed tasks on the account's opportunities and is set in the same transaction. Reading it replaces both latest-task subqueries (about 56 of roughly 370 rows per 56-account test, and about 200 of 1,378 in the headroom test), along with the addActivityDates helper, the activityDatesByAccount map and the sort. (2) A probe showed an empty-list insert or update uses 0 DML statements, so both isEmpty guards in createFollowUpTasks can go (cyclomatic -2). That frees room for a Rating-changed guard (+1), so unchanged accounts are not written back. On the rerun test's second run this saves 1 DML statement and about 56 DML rows. Class cyclomatic falls by about 3 (helper -2, guards -2, new if +1). The cognitive complexity of processAccounts goes from about 4 to 6, which is under 15. No new SOQL bind variables, so Graph Engine is unaffected. The tests still pass, and the only behaviour change is that last activity is now the standard LastActivityDate: closed tasks with any closed status and events now count too, where before only tasks with Status 'Completed' did. The tests create only completed tasks, so they still pass. A missing date still maps to NO_ACTIVITY, so it still gives Cold, and still triggers follow-up when open pipeline is above 0.","decision":["Resource efficiency is a focus but rose 0.9, not more than its margin 1","Graph Engine fell 7.4, more than its margin 0.5"],"learning":"Replacing the seeded-sentinel lookup with `acc.LastActivityDate ?? NO_ACTIVITY` cut rows and DML but made Graph Engine report a null dereference at `lastActivity.daysBetween`, because it can't see through `??`. Keep null-to-sentinel defaults in a form the analyzer can follow (a non-null seeded map value or an explicit null check), and note that the roughly 1-point Resource efficiency gain from row and DML trimming is too small to offset a Graph Engine regression.","deltas":{"PMD":0,"Graph Engine":-7.4,"Tests passing":0,"Code coverage":0,"Test run time":0.2,"Limit headroom":0.4,"Resource efficiency":0.9},"patch":"patches/10.patch","run":"runs/10","cost":{"plan":0.9090745999999998,"implement":0.16461100000000004,"learn":0.06735959999999999}},{"iteration":11,"at":"2026-10-27T09:15:47.187Z","outcome":"discard","dryRun":false,"overall":90.1,"current":89.8,"hours":0.695,"minutes":3.6,"focus":["Resource efficiency"],"reason":"Resource efficiency (82) is the weakest dimension that can still move. The query still reads one latest-completed-task row per opportunity, plus Closed Lost opportunities and opportunities with no Amount, and the account update rewrites every account even when its Rating has not changed. A probe showed that an account-level ActivityHistories subquery (IsTask = true AND Status = 'Completed' AND ActivityDate != NULL ORDER BY ActivityDate DESC LIMIT 1) also returns completed tasks on the account's opportunities, including Closed Lost ones excluded from the Opportunities subquery, at 1 SOQL query and 1 row per account in user mode. That replaces both task subqueries, so the Opportunities subquery can filter to Amount != NULL AND StageName != 'Closed Lost', which cuts query rows. Writing back only accounts whose Rating changed cuts DML rows, and DML statements on reruns because an empty update uses 0 statements. Complexity goes down: 3 conditions leave sumOpportunities, its nested addActivityDates call goes, and both isEmpty guards in createFollowUpTasks go (iteration #10 found empty DML costs 0 statements). The one addition is a Rating-changed if, for a net class cyclomatic change of about -4. No new bind variables, and the non-null seeded date list stays, so Graph Engine is unaffected. Behaviour is unchanged: won revenue still needs IsWon, CloseDate >= today-365 and a non-null Amount, pipeline still excludes won, Closed Won, Closed Lost and null amounts, last activity is still the latest completed dated task on the account or any of its opportunities (NO_ACTIVITY when there is none), and the follow-up dedupe is unchanged.","decision":["Resource efficiency is a focus but rose 0.4, not more than its margin 1"],"learning":"Row-level trims (filtering Opportunities, swapping Tasks for ActivityHistories, skipping unchanged-Rating updates) barely move Resource efficiency because the workload's SOQL and DML statement counts are already minimal and test runs rate every account anyway. Only changes that remove whole queries or DML statements move it by more than a fraction of a point.","deltas":{"PMD":0,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":1.2,"Limit headroom":0,"Resource efficiency":0.4},"patch":"patches/11.patch","run":"runs/11","cost":{"plan":0.5916032000000001,"implement":0.1603784,"learn":0.06615560000000001}},{"iteration":12,"at":"2026-10-27T09:19:24.474Z","outcome":"gated","dryRun":false,"current":89.8,"hours":0.726,"minutes":1.8,"focus":["Resource efficiency"],"reason":"DML statements (13.3% of the limit) are now the largest part of the Resource efficiency cost. Each run that needs follow-ups does 2 DML statements: insert as user newTasks and update as user accountsToUpdate. A probe showed that one Database.upsert(List\u003cSObject>, AccessLevel.USER_MODE) call holding an existing Account (Rating changed) and a new Task counts as 1 DML statement, saves the Rating change and creates the Task. Putting all accounts and then all new follow-up tasks into one List\u003cSObject> and upserting it once cuts DML statements per run from 2 to 1, so the DML statement cost should roughly halve. DML rows and queries are unchanged. Complexity goes down: both isEmpty guards in createFollowUpTasks go (iteration #10 found empty DML costs 0 statements) and the accountsToUpdate list goes. No SOQL or bind variables change, the save still runs in user mode, and no null-default patterns are added, so Graph Engine should stay flat. Behaviour is unchanged: every account still gets its new Rating written, and the same follow-up tasks, with the same fields and the same dedupe, are created.","decision":["gated by compile: AccountHealthRollup.cls:88 Invalid initializer type List\u003cAccount> found for List\u003cSObject>: expected an Integer or a List of type SObject; AccountHealthRollupTest.cls:88 Dependent class is invalid and needs recompilation:\n Class AccountHealthRollup : Invalid initializer type List\u003cAccount> found for List\u003cSObject>: expected an Integer or a List of type SObject"],"learning":"The gate was a compile error, not evidence against merging DML into one upsert: `new List\u003cSObject>(List\u003cAccount>)` is invalid Apex, so the idea is untested. Retry with `new List\u003cSObject>()` plus `addAll(accounts)` and `addAll(tasks)`, and probe collection-typing constructs before relying on them.","patch":"patches/12.patch","run":"runs/12","cost":{"plan":0.5256996,"implement":0.1374522,"learn":0.057873600000000004}},{"iteration":13,"at":"2026-10-27T09:21:47.000Z","outcome":"discard","dryRun":false,"overall":84.4,"current":89.8,"hours":0.784,"minutes":3,"focus":["Resource efficiency"],"reason":"DML statements (13.3% of limit) are the largest Resource efficiency cost: each run that needs follow-ups does 2 statements (insert as user newTasks, update as user accountsToUpdate). A probe confirmed that a List\u003cSObject> built with new List\u003cSObject>() plus addAll(accounts) and addAll(tasks) compiles, and one Database.upsert(records, AccessLevel.USER_MODE) counts as 1 DML statement, saves the Account Rating change and inserts the new Task. An empty upsert counts 0 statements. Merging both writes into one upsert halves DML statements per run, and DML rows and queries stay the same. Complexity falls: the early-return isEmpty guard and the newTasks isEmpty guard in createFollowUpTasks go (cyclomatic -2), and the accountsToUpdate list goes. No SOQL or bind variables change, the save stays in user mode, and no null-default patterns are added. Behaviour is unchanged: every rated account still gets its new Rating written, and the same follow-up tasks, with the same fields and dedupe, are created.","decision":["Graph Engine fell 39.0, more than its margin 0.5"],"learning":"Graph Engine's FLS rule only recognises the `insert as user` / `update as user` statement forms. Replacing them with a generic `Database.upsert(List\u003cSObject>, AccessLevel.USER_MODE)` produced four ApexFlsViolation findings and cost far more than the DML saving gained, so reduce DML count only while keeping the `as user` statement forms, and never route writes through a List\u003cSObject> or Database.* call.","deltas":{"PMD":0,"Graph Engine":-39,"Tests passing":0,"Code coverage":0,"Test run time":-1.7,"Limit headroom":0,"Resource efficiency":2.4},"patch":"patches/13.patch","run":"runs/13","cost":{"plan":0.5039546000000001,"implement":0.13657519999999998,"learn":0.0586576}},{"iteration":14,"at":"2026-10-27T09:24:45.196Z","outcome":"discard","dryRun":false,"overall":89.6,"current":89.8,"hours":0.848,"minutes":3.9,"focus":["Test run time"],"reason":"Test run time (49.6) is the weakest dimension that can still move; resource efficiency is near its floor (1 SOQL query and 2 DML statements per run, all opportunities relevant, all Ratings start null). Each run's single Account query uses a nested latest-completed-Task subquery under every Opportunity plus an account-level Tasks subquery. A probe on 30 accounts / 150 opportunities / 300 tasks showed one account-level ActivityHistories subquery (which iteration #11 found also covers tasks on the account's opportunities) returns the same 210 rows about 35-40% faster (141/123 ms against 243/180 ms). Each of the 12 test runs issues this query, so test run time should fall, and query rows drop slightly because there is no per-opportunity task row. Unlike #11, this adds no Opportunities filter and no Rating-changed guard, so the change is minimal and complexity falls: sumOpportunities loses its addActivityDates call. The non-null seeded date list and sort stay, so Graph Engine still sees a non-null lastActivity, and no bind variables or DML change. Behaviour is unchanged: last activity is still the latest completed dated task on the account or any of its opportunities (NO_ACTIVITY when there is none), and the follow-up dedupe is unchanged.","decision":["Test run time is a focus but rose -1.5, not more than its margin 3"],"learning":"Rewriting the activity subquery (nested Tasks to account-level ActivityHistories) did not improve Test run time, even though a 30-account probe showed 35-40% faster queries. Test datasets are tiny, so run time is dominated by fixed per-test setup and DML cost, and query-shape changes only move the row and query-count dimensions, so look for fixed-cost reductions (fewer or lighter test setup operations, fewer DML statements) instead.","deltas":{"PMD":0,"Graph Engine":0,"Tests passing":0,"Code coverage":0,"Test run time":-1.5,"Limit headroom":0,"Resource efficiency":0},"patch":"patches/14.patch","run":"runs/14","cost":{"plan":0.760414,"implement":0.1363934,"learn":0.0611856}}],"retro":null};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+const f = (x, d = 2) => x == null ? '–' : x.toFixed(d);
+const signed = (x, d = 1) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d);
+const trend = x => x > 0 ? 'up' : x < 0 ? 'down' : '';
+const s = data.summary, a = data.ascent;
+const OUTCOMES = ['keep', 'discard', 'gated', 'rejected', 'no-change', 'error'];
+const colour = o => css(o === 'no-change' ? '--nochange' : `--${o}`);
+
+document.title = `${a.name} ascent`;
+document.getElementById('title').textContent = `${a.name} ascent`;
+const when = t => new Date(t).toLocaleString();
+document.getElementById('meta').innerHTML = [
+  ['Mode', esc(a.mode) + (a.plannerStreamline ? ' + planner probes' : '')], ['Org', esc(a.targetOrg)], ['Branch', `<code>${esc(a.branch)}</code>`], ['Base', `<code>${esc(a.baseCommit.slice(0, 8))}</code>`],
+  ['Started', esc(when(a.createdAt))], ['Updated', esc(when(a.updatedAt))]
+].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+
+const icon = d => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const icons = {
+  target: icon('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>'),
+  up: icon('<path d="M12 19V5M5 12l7-7 7 7"/>'),
+  down: icon('<path d="M12 5v14M5 12l7 7 7-7"/>'),
+  trend: icon('<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>'),
+  clock: icon('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  flask: icon('<path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3"/>'),
+  check: icon('<path d="M5 12l5 5 9-10"/>'),
+  coin: icon('<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/>')};
+const scoreBar = (() => {
+  const w = 96, x = v => Math.max(0, Math.min(100, v)) / 100 * w;
+  return `<svg class="graphic" width="${w}" height="44" viewBox="0 0 ${w} 44">
+    <rect x="0" y="18" width="${w}" height="8" rx="4" fill="var(--grid)"/>
+    <rect x="0" y="18" width="${x(s.baseline)}" height="8" rx="4" fill="var(--discard)"/>
+    <rect x="${x(s.baseline)}" y="18" width="${Math.max(0, x(s.current) - x(s.baseline))}" height="8" rx="2" fill="var(--keep)"/>
+    <text x="0" y="42" font-size="10" fill="var(--muted)">0</text>
+    <text x="${w}" y="42" font-size="10" fill="var(--muted)" text-anchor="end">100</text></svg>`;})();
+const gauge = (() => {
+  const r = 40, t = Math.max(-90, Math.min(90, s.angle)) * Math.PI / 180;
+  return `<svg class="graphic" width="56" height="56" viewBox="0 0 56 56">
+    <path d="M ${6 + r} 48 A ${r} ${r} 0 0 0 6 ${48 - r}" fill="none" stroke="var(--grid)" stroke-width="6"/>
+    <line x1="6" y1="48" x2="${6 + r}" y2="48" stroke="var(--grid)" stroke-width="1"/>
+    <line x1="6" y1="48" x2="${6 + r * Math.SQRT1_2}" y2="${48 - r * Math.SQRT1_2}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="2 2"/>
+    <line x1="6" y1="48" x2="${6 + r * Math.cos(t)}" y2="${48 - r * Math.sin(t)}" stroke="var(--keep)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="6" cy="48" r="3" fill="var(--text)"/></svg>`;})();
+const ring = (() => {
+  const r = 22, c = 2 * Math.PI * r, share = s.iterations ? s.kept / s.iterations : 0;
+  return `<svg class="graphic" width="56" height="56" viewBox="0 0 56 56">
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--grid)" stroke-width="6"/>
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--keep)" stroke-width="6" stroke-linecap="round"
+      stroke-dasharray="${share * c} ${c}" transform="rotate(-90 28 28)"/>
+    <text x="28" y="32" font-size="12" font-weight="600" text-anchor="middle" fill="var(--text)">${Math.round(share * 100)}%</text></svg>`;})();
+const STEP_COLOURS = {plan: '--keep', implement: '--gated', learn: '--discard'};
+const costShares = Object.entries(data.cost.byStep).map(([step, v]) => [step, v, data.cost.total ? v / data.cost.total : 0]);
+const pie = (() => {
+  const r = 26, point = t => `${28 + r * Math.sin(t * 2 * Math.PI)} ${28 - r * Math.cos(t * 2 * Math.PI)}`;
+  let from = 0;
+  const slices = costShares.filter(([, , share]) => share > 0).map(([step, , share]) => {
+    const path = share >= 1
+      ? `<circle cx="28" cy="28" r="${r}" fill="var(${STEP_COLOURS[step]})"/>`
+      : `<path d="M28 28 L${point(from)} A${r} ${r} 0 ${share > 0.5 ? 1 : 0} 1 ${point(from + share)} Z" fill="var(${STEP_COLOURS[step]})" stroke="var(--surface)" stroke-width="1.5"/>`;
+    from += share;
+    return path;
+  });
+  return `<svg class="graphic" width="56" height="56" viewBox="0 0 56 56">
+    ${slices.length ? slices.join('') : `<circle cx="28" cy="28" r="${r}" fill="var(--grid)"/>`}</svg>`;})();
+document.getElementById('tiles').innerHTML = `
+  <div class="card">${scoreBar}<div>
+    <div class="label">${icons.target} Gain on baseline</div>
+    <div class="big">${signed(s.gain)} <span style="font-size:16px;color:var(--muted)">pts</span></div>
+    <div class="row">${s.gain >= 0 ? icons.up : icons.down}Current <b>${f(s.current)}</b> from ${f(s.baseline)} baseline</div></div></div>
+  <div class="card">${gauge}<div>
+    <div class="label">${icons.trend} Climb angle</div>
+    <div class="big">${f(s.angle, 1)}°</div>
+    <div class="sub">45° is one point an iteration</div>
+    <div class="row"><b>${f(s.perHour)}</b> pts/hour · <b>${f(s.perIteration)}</b> pts/iteration</div></div></div>
+  <div class="card">${ring}<div>
+    <div class="label">${icons.check} Kept</div>
+    <div class="big">${s.kept} <span style="font-size:16px;color:var(--muted)">of ${s.iterations}</span></div>
+    <div class="row">${icons.clock}<b>${f(s.hours, 1)}</b> hours</div>
+    <div class="row">${icons.flask}<b>${f(s.minutesPerIteration, 1)}</b> min/iteration</div></div></div>
+  <div class="card">${pie}<div>
+    <div class="label">${icons.coin} Total cost</div>
+    <div class="big">$${f(data.cost.total)}</div>
+    ${costShares.map(([step, v, share]) => `<div class="row"><svg width="10" height="10"><rect width="10" height="10" rx="2" fill="var(${STEP_COLOURS[step]})"/></svg>${step} <b>$${f(v)}</b> · ${Math.round(share * 100)}%</div>`).join('')}</div></div>`;
+
+const climb = data.rows.filter(r => !r.dryRun);
+const scored = climb.filter(r => r.overall != null);
+const unscored = climb.filter(r => r.overall == null);
+const steps = [{hours: 0, current: s.baseline}].concat(climb.map(r => ({hours: r.hours, current: r.current})));
+const config = {background: css('--surface'), view: {stroke: null},
+  axis: {labelColor: css('--muted'), titleColor: css('--muted'), gridColor: css('--grid'), domainColor: css('--grid'), tickColor: css('--grid')},
+  legend: {labelColor: css('--text'), titleColor: css('--muted')}};
+const outcome = {field: 'outcome', title: 'Outcome', scale: {domain: OUTCOMES, range: OUTCOMES.map(colour)}};
+const tip = [{field: 'iteration', title: 'Iteration'}, {field: 'outcome', title: 'Outcome'},
+  {field: 'overall', title: 'Score', format: '.2f'}, {field: 'current', title: 'Current kept', format: '.2f'},
+  {field: 'hours', title: 'Hours', format: '.2f'}, {field: 'minutes', title: 'Minutes', format: '.1f'},
+  {field: 'focusText', title: 'Focus'}, {field: 'reason', title: 'Reason'}];
+const withFocus = rows => rows.map(r => ({...r, focusText: r.focus.join(', ')}));
+const lastHours = Math.max(s.hours, ...climb.map(r => r.hours));
+const fiveMinutes = Array.from({length: Math.max(1, Math.ceil(lastHours * 12)) + 1}, (_, i) => i / 12);
+const minutes = 'round(datum.value * 60)';
+const waiting = id => { document.getElementById(id).innerHTML = '<div class="empty">No iterations yet. This chart fills in after the first one finishes.</div>'; };
+const hoursAxis = {field: 'hours', type: 'quantitative', title: 'Time since baseline (h:mm)',
+  scale: {domain: [0, fiveMinutes.at(-1)], nice: false},
+  axis: {values: fiveMinutes, labelExpr: `${minutes} % 15 ? '' : floor(${minutes} / 60) + ':' + pad(${minutes} % 60, 2, '0', 'left')`}};
+const ends = steps.length > 1 && steps.at(-1).current.toFixed(0) !== steps[0].current.toFixed(0)
+  ? [[steps[0], 'left'], [steps.at(-1), 'right']] : [[steps.at(-1), 'left']];
+vegaEmbed('#climb', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', config,
+  vconcat: [
+    {width: 'container', height: 320, layer: [
+      {data: {values: steps}, mark: {type: 'line', interpolate: 'step-after', strokeWidth: 2, color: css('--keep')},
+       encoding: {x: {...hoursAxis, axis: {...hoursAxis.axis, title: null, labels: false}}, y: {field: 'current', type: 'quantitative', title: 'Overall score', scale: {zero: false}}}},
+      {data: {values: s.fit}, mark: {type: 'line', strokeDash: [6, 4], strokeWidth: 2, color: css('--muted'), opacity: 0.3},
+       encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'fit', type: 'quantitative'}}},
+      ...ends.map(([step, align]) => (
+       {data: {values: [step]}, mark: {type: 'text', align, baseline: 'bottom', dy: -6, fontSize: 28, fontWeight: 600, color: css('--text')},
+        encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'current', type: 'quantitative'}, text: {field: 'current', format: '.0f'}}})),
+      {data: {values: withFocus(scored)}, mark: {type: 'point', size: 90, strokeWidth: 2, opacity: 1},
+       encoding: {x: {field: 'hours', type: 'quantitative'}, y: {field: 'overall', type: 'quantitative'},
+                  color: outcome, shape: {field: 'outcome', legend: null},
+                  fill: {condition: {test: "datum.outcome === 'keep'", value: css('--keep')}, value: css('--surface')},
+                  tooltip: tip}}]},
+    {width: 'container', height: 60, data: {values: withFocus(unscored)}, mark: {type: 'tick', thickness: 2, size: 14},
+     encoding: {x: hoursAxis, y: {field: 'outcome', type: 'nominal', title: null, scale: {domain: ['gated', 'rejected', 'no-change', 'error']}},
+                color: {...outcome, legend: null}, tooltip: tip}}
+  ], resolve: {scale: {x: 'shared'}}}, {actions: false});
+const timed = climb.filter(r => r.minutes != null);
+if (!timed.length) waiting('durations');
+else vegaEmbed('#durations', {$schema: 'https://vega.github.io/schema/vega-lite/5.json', width: 'container', height: 200, config,
+  data: {values: withFocus(timed)},
+  mark: {type: 'bar', cornerRadiusTopLeft: 4, cornerRadiusTopRight: 4, width: {expr: "min(40, bandwidth('x') * 0.8)"}},
+  encoding: {x: {field: 'iteration', type: 'ordinal', title: 'Iteration', axis: {labelAngle: 0}},
+             y: {field: 'minutes', type: 'quantitative', title: 'Minutes'},
+             color: outcome, tooltip: tip}}, {actions: false});
+
+const usd = x => `$${x.toFixed(2)}`;
+document.getElementById("cost-title").textContent =
+  `Cumulative agent cost by step: ${usd(data.cost.total)} total (${Object.entries(data.cost.byStep).map(([k, v]) => `${k} ${usd(v)}`).join(", ")}), estimated at list price`;
+const byCost = Object.entries(data.cost.byStep).sort(([, a], [, b]) => b - a).map(([step]) => step);
+if (!data.rows.length) waiting("cost");
+else vegaEmbed("#cost", {$schema: "https://vega.github.io/schema/vega-lite/5.json", width: "container", height: 240, config,
+  data: {values: data.cost.series.map(p => ({...p, rank: byCost.indexOf(p.step)}))},
+  mark: {type: "area", line: {strokeWidth: 2}, opacity: 0.25},
+  encoding: {x: hoursAxis,
+             y: {field: "usd", type: "quantitative", stack: "zero", title: "Cumulative cost (USD)", axis: {format: "$.2f"}},
+             color: {field: "step", title: "Step", scale: {domain: [...byCost].reverse(), range: [...byCost].reverse().map(step => css(STEP_COLOURS[step]))}},
+             order: {field: "rank"},
+             tooltip: [{field: "step", title: "Step"}, {field: "hours", title: "Hours", format: ".2f"}, {field: "usd", title: "Cumulative", format: "$.2f"}]}}, {actions: false});
+
+const spark = series => {
+  const w = 96, h = 24, lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1;
+  const pts = series.map((v, i) => [series.length > 1 ? i / (series.length - 1) * w : w / 2, h - 2 - (v - lo) / span * (h - 4)]);
+  const [lx, ly] = pts.at(-1);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="var(--keep)" stroke-width="1.5"/><circle cx="${lx}" cy="${ly}" r="2.5" fill="var(--keep)"/></svg>`;
+};
+document.getElementById('dimensions').innerHTML = `
+  <tr><th>Dimension</th><th class="num">Baseline</th><th class="num">Current</th><th class="num">Change</th><th class="num">Margin</th><th>Kept iterations</th></tr>
+  ${data.dimensions.map(d => `<tr><td>${esc(d.name)}</td><td class="num">${f(d.baseline, 1)}</td><td class="num">${f(d.current, 1)}</td>
+    <td class="num ${trend(d.delta)}">${signed(d.delta)}</td><td class="num">${d.margin}</td><td>${spark(d.series)}</td></tr>`).join('')}`;
+
+const deltas = r => r.deltas ? Object.entries(r.deltas).filter(([, v]) => v !== 0)
+  .map(([k, v]) => `<div class="deltas">${esc(k)} <span class="${trend(v)}">${signed(v)}</span></div>`).join('') || '<span class="focus">no change</span>' : '';
+const note = (k, v) => v ? `<p><span class="k">${k}</span>${esc(v)}</p>` : '';
+const link = (label, href) => href ? `<div><a href="${esc(href)}">${label}</a></div>` : '';
+document.getElementById('iterations').innerHTML = `
+  <tr><th class="num">#</th><th>Outcome</th><th class="num">Overall</th><th>Changes vs kept</th><th>Plan, decision and learning</th><th>Files</th></tr>
+  ${[...data.rows].reverse().map(r => `<tr>
+    <td class="num">${r.iteration}</td>
+    <td><span class="pill" style="background:${colour(r.outcome)}">${esc(r.outcome)}</span>${r.dryRun ? '<div><span class="tag">dry run</span></div>' : ''}
+      ${r.focus.length ? `<div class="focus" style="margin-top:6px">${esc(r.focus.join(', '))}</div>` : ''}</td>
+    <td class="num">${f(r.overall)}</td>
+    <td>${deltas(r)}</td>
+    <td class="notes">${note('Reason', r.reason)}${note('Decision', r.decision.join('; '))}${note('Learning', r.learning)}</td>
+    <td>${link('patch', r.patch)}${link('run', r.run)}</td></tr>`).join('') || '<tr><td colspan="6" class="focus">No iterations yet.</td></tr>'}`;
+
+if (data.retro) {
+  const r = data.retro;
+  document.getElementById('retro').hidden = false;
+  document.getElementById('retro-meta').innerHTML = [
+    ['Commits', `<code>${esc(r.base.slice(0, 8))}..${esc(r.head.slice(0, 8))}</code>`], ['Written', esc(when(r.at))],
+    ['Tests changed', esc(r.changedTests.join(', ') || 'none')]
+  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+  document.getElementById('retro-summary').textContent = r.summary;
+  const tone = {high: '--rejected', medium: '--gated', low: '--discard', good: '--keep', questionable: '--gated', bad: '--rejected'};
+  const pill = v => `<span class="pill" style="background:${css(tone[v])}">${esc(v)}</span>`;
+  const groups = [
+    ['Behaviour changes', r.behaviourChanges, i => `${pill(i.severity)}<div class="focus" style="margin-top:6px">${i.caughtByTests ? 'caught by tests' : 'not caught by tests'}</div>`,
+      i => note('Evidence', i.evidence) + note('Iterations', i.iterations.join(', ')) + note('Proposed test', i.proposedTest)],
+    ['Patterns', r.patterns, i => pill(i.verdict), i => note('Evidence', i.evidence)],
+    ['Test gaps', r.testGaps, () => '', i => note('Proposed test', i.proposedTest)],
+    ['Other', r.other, () => '', () => '']];
+  document.getElementById('retro-items').innerHTML = `
+    <tr><th>Code</th><th>Kind</th><th>Finding</th></tr>
+    ${groups.flatMap(([kind, items, badge, extra]) => items.map(i => `<tr>
+      <td><b>${esc(i.code)}</b></td><td>${kind}${badge(i) ? `<div style="margin-top:4px">${badge(i)}</div>` : ''}</td>
+      <td class="notes"><p><b>${esc(i.title)}</b></p><p>${esc(i.detail)}</p>${extra(i)}</td></tr>`)).join('')}`;
+}
+</script>
+</body>
+</html>
