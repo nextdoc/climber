@@ -4,20 +4,22 @@ import { join } from "node:path";
 import { REPO_ROOT } from "./ascent.ts";
 import { scoreRun } from "./scoring.ts";
 
+const round = (n: number) => Math.round(n * 10) / 10;
+
 const RUN = join(REPO_ROOT, "target/tmp/scoring-test");
 
 const log = (...lines: string[]) => lines.map((l, i) => `${i}\t12:00:00.0|USER_DEBUG|[1]|DEBUG|${l.replaceAll("|", "&#124;")}`).join("\n");
 
 const limits = (cpu: number) => JSON.stringify({ "Maximum CPU time": { used: cpu, limit: 10000 } });
 
-const score = () =>
+const score = (headroomTest = ["T.headroom"]) =>
   scoreRun({
     app: [],
     test: [],
     run: RUN,
     root: RUN,
     mode: "streamline",
-    headroomTest: "T.headroom",
+    headroomTest,
     weights: { PMD: 0, "Graph Engine": 0, "Code coverage": 0, "Test run time": 0 },
     runCounts: { "T.main": 3 }
   });
@@ -35,8 +37,17 @@ test("scores streamline logs, multiplying limit use by run counts and leaving ou
   variants({ compiled: true, success: true }, { compiled: true, success: true });
   const dimensions = Object.fromEntries(score().dimensions!.map((d) => [d.name, d]));
   expect(dimensions["Tests passing"]).toMatchObject({ testsRan: 2, failing: 0, score: 100 });
-  expect(dimensions["Limit headroom"]).toMatchObject({ test: "T.headroom", peakPercent: 40, score: 60 });
-  expect(dimensions["Resource efficiency"].percentOfLimit).toEqual({ "Maximum CPU time": 30 });
+  expect(dimensions["Limit headroom"]).toMatchObject({ tests: { "T.headroom": { peakPercent: 40 } }, score: 60 });
+  expect(dimensions["Resource efficiency"]).toMatchObject({ classes: { T: { percentOfLimit: { "Maximum CPU time": 30 } } } });
+});
+
+test("scores each climbed class on its own and averages them", () => {
+  variants({ compiled: true, success: true }, { compiled: true, success: true }, { compiled: true, success: true });
+  writeFileSync(join(RUN, "logs/other.log"), log("TEST|U.a|PASS", `LIMITS|U.main|${limits(1700)}`, `LIMITS|U.headroom|${limits(8000)}`));
+  const dimensions = Object.fromEntries(score(["T.headroom", "U.headroom"]).dimensions!.map((d) => [d.name, d]));
+  expect(dimensions["Limit headroom"].score).toBe(40);
+  expect(dimensions["Resource efficiency"]).toMatchObject({ classes: { T: { penalty: 30 }, U: { penalty: 17 } } });
+  expect(dimensions["Resource efficiency"].score).toBe(round((100 * 170) / 200 / 2 + (100 * 170) / 187 / 2));
 });
 
 test("counts a variant with an uncaught exception as one failing test", () => {

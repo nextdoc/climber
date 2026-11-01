@@ -1,6 +1,7 @@
 {
   "app": [
-    "force-app/**/classes/AccountHealthRollup.cls"
+    "force-app/**/classes/AccountHealthRollup.cls",
+    "force-app/**/classes/CaseSlaEscalation.cls"
   ],
   "test": [
     "force-app/**/classes/*Test.cls",
@@ -8,12 +9,13 @@
     "force-app/**/classes/CaseFixtures.cls"
   ],
   "testClasses": {
-    "sample": [
-      "AccountHealthRollupTest"
-    ],
+    "sample": ["AccountHealthRollupTest", "CaseSlaEscalationTest"],
     "holdout": []
   },
-  "headroomTest": "AccountHealthRollupTest.headroomAt200Accounts",
+  "headroomTest": [
+    "AccountHealthRollupTest.headroomAt200Accounts",
+    "CaseSlaEscalationTest.headroomAt200Cases"
+  ],
   "steps": {
     "plan": {
       "model": "claude-opus-5-5",
@@ -59,18 +61,37 @@
     "Limit headroom": 3,
     "Resource efficiency": 1
   },
-  "streamline": {
-    "classes": [
-      "force-app/main/default/classes/AccountHealthRollup.cls",
-      "force-app/main/default/classes/Fixtures.cls"
-    ],
-    "scenarios": "apex/streamline/scenarios/AccountHealthRollupTest.apex",
-    "variants": {
-      "correctness": "new AccountHealthRollupTest().runCorrectness();",
-      "headroom": "new AccountHealthRollupTest().runHeadroom();"
+  "streamline": [
+    {
+      "app": ["force-app/main/default/classes/AccountHealthRollup.cls"],
+      "classes": [
+        "force-app/main/default/classes/AccountHealthRollup.cls",
+        "force-app/main/default/classes/Fixtures.cls"
+      ],
+      "scenarios": "apex/streamline/scenarios/AccountHealthRollupTest.apex",
+      "variants": {
+        "correctness": "new AccountHealthRollupTest().runCorrectness();",
+        "headroom": "new AccountHealthRollupTest().runHeadroom();"
+      },
+      "runCounts": {
+        "AccountHealthRollupTest.ratesEveryAccount": 9
+      }
     },
-    "runCounts": {
-      "AccountHealthRollupTest.ratesEveryAccount": 9
+    {
+      "app": ["force-app/main/default/classes/CaseSlaEscalation.cls"],
+      "classes": [
+        "force-app/main/default/classes/AccountHealthRollup.cls",
+        "force-app/main/default/classes/CaseSlaEscalation.cls",
+        "force-app/main/default/classes/CaseFixtures.cls"
+      ],
+      "scenarios": "apex/streamline/scenarios/CaseSlaEscalationTest.apex",
+      "variants": {
+        "caseCorrectness": "new CaseSlaEscalationTest().runCorrectness();",
+        "caseHeadroom": "new CaseSlaEscalationTest().runHeadroom();"
+      },
+      "runCounts": {
+        "CaseSlaEscalationTest.escalatesEveryBreachedCase": 12
+      }
     }
-  }
+  ]
 }

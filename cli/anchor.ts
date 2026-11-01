@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { AscentDefaults, ascentDir, assertScratchOrg, loadConfig, REPO_ROOT, run } from "./lib/ascent.ts";
 import { AuditReply, auditDir, auditErrors, auditPrompt, prepareAudit } from "./lib/audit.ts";
 import { writeReview } from "./lib/review.ts";
-import { prepareVerify, runScenarios, verifiable, verifyDir, verifyPrompt } from "./lib/verify.ts";
+import { prepareVerify, runScenarios, verifyPrompt, verifyTargets, type ScenarioResult } from "./lib/verify.ts";
 
 const program = new Command()
   .name("anchor")
@@ -85,15 +85,16 @@ program
     const config = loadConfig(name);
     assertScratchOrg(config.targetOrg);
     const reply = AuditReply.parse(JSON.parse(readFileSync(opts.findings ?? join(auditDir(name), "findings.json"), "utf8")));
-    const dir = prepareVerify(config, reply.findings);
-    if (opts.agent) {
-      for (const file of ["scenarios.apex", "skipped.json"]) rmSync(join(dir, file), { force: true });
-      runAgent(name, "verify", dir, verifyPrompt(name));
+    const { targets, unrouted } = prepareVerify(config, reply.findings);
+    const problem = "no streamline suite climbs the classes its evidence cites";
+    const results: ScenarioResult[] = unrouted.map((id) => ({ id, status: "skipped", problem }));
+    for (const { target, ids } of targets) {
+      if (opts.agent) {
+        for (const file of ["scenarios.apex", "skipped.json"]) rmSync(join(target.dir, file), { force: true });
+        runAgent(name, "verify", target.dir, verifyPrompt(name, target));
+      }
+      results.push(...(await runScenarios(config, target.dir, ids)));
     }
-    const results = await runScenarios(
-      config,
-      verifiable(reply.findings).map((f) => f.id)
-    );
     const byId = new Map(results.map(({ id, ...verify }) => [id, verify]));
     const findings = reply.findings.map((f) => (byId.has(f.id) ? { ...f, verify: byId.get(f.id) } : f));
     const out = join(ascentDir(name), "anchor", "findings.json");
@@ -105,12 +106,16 @@ program
   .command("run-scenario")
   .description("Run verify scenarios with Streamline and print each version's outputs. The verify agent runs it on its own scenarios")
   .argument("<name>", "ascent name")
-  .argument("<ids...>", "finding ids, each with a Scenario_<id> class in the verify folder's scenarios.apex")
-  .action(async (name: string, ids: string[]) => {
+  .argument("<ids...>", "finding ids, each with a Scenario_<id> class in the target's scenarios.apex")
+  .option("-t, --target <name>", "the verify target, named after its first climbed class, when the ascent has several")
+  .action(async (name: string, ids: string[], opts: { target?: string }) => {
     const config = loadConfig(name);
     assertScratchOrg(config.targetOrg);
-    const results = await runScenarios(config, ids);
-    console.log(JSON.stringify({ scenarios: join(verifyDir(name), "scenarios.apex"), results }, null, 2));
+    const targets = verifyTargets(config);
+    const target = opts.target ? targets.find((t) => t.name === opts.target) : targets.length === 1 ? targets[0] : undefined;
+    if (!target) throw new Error(`Pass --target, one of ${targets.map((t) => t.name).join(", ")}`);
+    const results = await runScenarios(config, target.dir, ids);
+    console.log(JSON.stringify({ scenarios: join(target.dir, "scenarios.apex"), results }, null, 2));
     if (results.some((r) => r.status === "error")) process.exitCode = 1;
   });
 

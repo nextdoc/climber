@@ -28,8 +28,10 @@ export type Step = z.infer<typeof Step>;
 /** Dimensions streamline mode cannot measure, because anonymous Apex reports neither coverage nor test run time. */
 export const STREAMLINE_UNAVAILABLE = ["Code coverage", "Test run time"];
 
-/** What streamline mode composes into one anonymous Apex script per variant. Paths are relative to the worktree. */
-const StreamlineConfig = z.strictObject({
+/** One suite of what streamline mode composes into one anonymous Apex script per variant. Paths are relative to the worktree. */
+const StreamlineSuite = z.strictObject({
+  /** Globs of the classes this suite climbs, by default every editable class it extracts. Verify routes findings by them. */
+  app: z.array(z.string()).optional(),
   /** Globs of the classes to extract, application classes and test fixtures alike. */
   classes: z.array(z.string()).min(1),
   /** The scenario classes, which log TEST and LIMITS lines. */
@@ -40,7 +42,18 @@ const StreamlineConfig = z.strictObject({
   runCounts: z.record(z.string(), z.int().positive()).default({})
 });
 
-export type StreamlineConfig = z.infer<typeof StreamlineConfig>;
+export type StreamlineSuite = z.infer<typeof StreamlineSuite>;
+
+/** One suite per class under climb, so each script stays under the Streamline size limit. A single suite needs no list. */
+const StreamlineConfig = z
+  .preprocess((v) => (Array.isArray(v) ? v : [v]), z.array(StreamlineSuite).min(1))
+  .refine((suites) => {
+    const names = suites.flatMap((s) => Object.keys(s.variants));
+    return new Set(names).size === names.length;
+  }, "Variant names must be unique across streamline suites");
+
+/** One test, or a list when several classes are climbed. */
+const HeadroomTests = z.preprocess((v) => (typeof v === "string" ? [v] : v), z.array(z.string().min(1)).min(1));
 
 const AscentFields = z.strictObject({
   name: z.string().min(1),
@@ -69,8 +82,8 @@ const AscentFields = z.strictObject({
   plannerStreamline: z.boolean().default(false),
   /** How runs collect their inputs. Fixed per ascent, because scores from the two modes differ. */
   mode: z.enum(["deploy", "streamline"]).default("deploy"),
-  /** The test whose limit use scores limit headroom. Resource efficiency leaves it out. */
-  headroomTest: z.string().min(1),
+  /** The tests whose limit use scores limit headroom, each on its own. Resource efficiency leaves them out. */
+  headroomTest: HeadroomTests,
   streamline: StreamlineConfig.optional()
 });
 
@@ -239,7 +252,7 @@ export function scoreOptions(config: AscentConfig, folder: string): ScoreOptions
     weights: config.weights,
     mode: config.mode,
     headroomTest: config.headroomTest,
-    runCounts: config.streamline?.runCounts
+    runCounts: Object.assign({}, ...(config.streamline ?? []).map((s) => s.runCounts))
   };
 }
 
@@ -269,13 +282,13 @@ export async function collectAndScore(config: AscentConfig, folder: string): Pro
   if (streamline) {
     assertScratchOrg(config.targetOrg);
     try {
-      compose(config.worktree, folder, config.streamline!);
+      for (const suite of config.streamline!) compose(config.worktree, folder, suite);
     } catch (error) {
       if (!(error instanceof ExtractError)) throw error;
       writeFileSync(join(folder, "extract-error.txt"), error.message);
       return { gated: true, gate: "extract", gateDetail: error.message, overall: 0 };
     }
-    await runVariants(MCP_CONFIG, config.targetOrg, folder, Object.keys(config.streamline!.variants));
+    await runVariants(MCP_CONFIG, config.targetOrg, folder, config.streamline!.flatMap((s) => Object.keys(s.variants)));
   }
   return scoreRun(scoreOptions(config, folder));
 }

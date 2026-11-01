@@ -67,11 +67,13 @@ The score is the headroom left on the tightest limit: `100 − peak percent`. A 
 
 Baseline score: 100 − 95.3 = 4.7. One batch of 200 accounts nearly exhausts the CPU limit.
 
+An ascent that climbs several classes names one headroom test per class in `headroomTest`. Each test is scored on its own, and the dimension score is their mean.
+
 #### Resource efficiency
 
 Source: every other test with a `TESTING_LIMITS` block. The headroom test is excluded so the two dimensions stay independent.
 
-The penalty is the percent of each limit used, summed over those tests, then added up across limits. `K` = 170, roughly the baseline penalty.
+The penalty is the percent of each limit used, summed over those tests, then added up across limits. `K` = 170, roughly the baseline penalty. With several test classes, each class gets its own penalty and score, and the dimension score is their mean, so one class's limit use never counts against another's.
 
 | Limit | Baseline used | Limit | Percent of limit |
 |---|---|---|---|

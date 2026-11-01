@@ -162,6 +162,30 @@ describe("AscentConfig", () => {
   test("rejects streamline mode that weighs code coverage", () => {
     expect(AscentConfig.safeParse({ ...config, mode: "streamline", streamline, weights: { "Test run time": 0 } }).success).toBe(false);
   });
+
+  test("reads one headroom test or streamline suite as a list of one", () => {
+    const parsed = AscentConfig.parse({ ...config, mode: "streamline", streamline, weights: unavailableOff });
+    expect(parsed.headroomTest).toEqual(["ATest.headroom"]);
+    expect(parsed.streamline).toEqual([{ ...streamline, runCounts: {} }]);
+  });
+
+  test("accepts a headroom test and a streamline suite per climbed class", () => {
+    const other = { app: ["b"], classes: ["b"], scenarios: "t.apex", variants: { other: "new T().run();" } };
+    const parsed = AscentConfig.parse({
+      ...config,
+      headroomTest: ["ATest.headroom", "BTest.headroom"],
+      mode: "streamline",
+      streamline: [streamline, other],
+      weights: unavailableOff
+    });
+    expect(parsed.headroomTest).toHaveLength(2);
+    expect(parsed.streamline).toHaveLength(2);
+  });
+
+  test("rejects a variant name used by two streamline suites", () => {
+    const parsed = AscentConfig.safeParse({ ...config, mode: "streamline", streamline: [streamline, streamline], weights: unavailableOff });
+    expect(parsed.success).toBe(false);
+  });
 });
 
 test("the committed ascent.config.json is valid", async () => {

@@ -87,16 +87,17 @@ The test methods are rewritten as scenarios in `apex/streamline/scenarios/`. One
 
 #### Config
 
-The ascent config's `streamline` block defines what each run composes. Paths are relative to the worktree.
+The ascent config's `streamline` block defines what each run composes. Paths are relative to the worktree. It is one suite, or a list of suites, one per climbed class. Each suite composes its own scripts, so each stays under the size limit, and variant names must be unique across suites.
 
 | Field | Meaning |
 |---|---|
+| `app` | Globs of the classes the suite climbs, by default every editable class in `classes`. Verify routes findings to a suite by them |
 | `classes` | Globs of the classes to extract: application classes and fixtures |
 | `scenarios` | The scenario classes file |
 | `variants` | The `CODE` section statement per variant, e.g. `"correctness": "new AccountHealthRollupTest().runCorrectness();"` |
 | `runCounts` | Test runs each measured scenario stands for in resource efficiency |
 
-`headroomTest` names the test whose limit use scores limit headroom, in both modes. `ascent-init --mode streamline` sets code coverage and test run time to weight 0.
+`headroomTest` names the test whose limit use scores limit headroom, in both modes, or a list with one test per climbed class. `ascent-init --mode streamline` sets code coverage and test run time to weight 0.
 
 #### Run
 
@@ -111,7 +112,9 @@ A variant is one composed script with one entry point. Each runs in its own tran
 | `correctness` | 50 bulk + 6 scenario accounts | Every scenario, plus the limit use of the main run, the filtered run and the rerun |
 | `headroom` | 194 bulk + 6 scenario accounts | Limit use of one 200-account batch |
 
-They are split because one script running both came close to the 10 s CPU limit.
+They are split because one script running both came close to the 10 s CPU limit. The CaseSlaEscalation suite has the same pair, `caseCorrectness` and `caseHeadroom`.
+
+Outside a test, the scratch org's one spare Salesforce license allows one new user, and deactivating a user alongside case data is mixed DML. The Case scenarios insert only the account owner, use the running user as the former owner, and skip `inactiveAccountOwnerKeepsCaseOwner`.
 
 ### Output
 
@@ -127,7 +130,7 @@ A run folder holds `streamline.json` (whether each variant compiled and succeede
 
 ### Scoring
 
-`bun cli/score.ts -m streamline --headroom-test <test>` reads the run folder above.
+`bun cli/score.ts -m streamline --headroom-test <tests...>` reads the run folder above.
 
 | Dimension | Streamline input |
 |---|---|

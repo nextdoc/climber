@@ -26,7 +26,7 @@ export type Weights = Partial<Record<string, number>>;
 export type Mode = "deploy" | "streamline";
 
 /**
- * headroomTest: the test whose limit use scores limit headroom.
+ * headroomTest: the tests whose limit use scores limit headroom, one per climbed class.
  * runCounts: how many test runs each Streamline measured scenario stands for in resource efficiency. A missing scenario counts once.
  */
 export type ScoreOptions = {
@@ -34,7 +34,7 @@ export type ScoreOptions = {
   test: string[];
   run: string;
   root: string;
-  headroomTest: string;
+  headroomTest: string[];
   weights?: Weights;
   mode?: Mode;
   runCounts?: Record<string, number>;
@@ -168,35 +168,43 @@ function testLimits(log: string): Map<string, LimitUsage> {
 
 const percentOf = (u: { used: number; limit: number }) => round((100 * u.used) / u.limit);
 
-function scoreHeadroom(limits: Map<string, LimitUsage>, test: string): DimensionScore {
-  const usage = limits.get(test);
-  if (usage === undefined) {
-    return { name: "Limit headroom", weight: 1, test, peakPercent: null, score: 0 };
-  }
+const mean = (scores: number[]) => scores.reduce((sum, s) => sum + s, 0) / scores.length;
+
+function headroomOf(usage: LimitUsage | undefined) {
+  if (usage === undefined) return { peakPercent: null, score: 0 };
   const percentOfLimit = Object.fromEntries(Object.entries(usage).map(([name, u]) => [name, percentOf(u)]));
   const peakPercent = Math.max(...Object.values(percentOfLimit));
-  return {
-    name: "Limit headroom",
-    weight: 1,
-    test,
-    percentOfLimit,
-    peakPercent,
-    score: Math.max(0, 100 - peakPercent)
-  };
+  return { percentOfLimit, peakPercent, score: Math.max(0, 100 - peakPercent) };
 }
 
-function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTest: string, runCounts: Record<string, number> = {}): DimensionScore {
-  const totals: LimitUsage = {};
+/** Each headroom test is scored on its own, and the dimension is their mean. */
+function scoreHeadroom(limits: Map<string, LimitUsage>, headroomTests: string[]): DimensionScore {
+  const tests = Object.fromEntries(headroomTests.map((t) => [t, headroomOf(limits.get(t))]));
+  return { name: "Limit headroom", weight: 1, tests, score: mean(Object.values(tests).map((t) => t.score)) };
+}
+
+/** Totals limit use per test class, leaving out the headroom tests, and scores the mean of the per-class scores. */
+function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTests: string[], runCounts: Record<string, number> = {}): DimensionScore {
+  const totalsByClass = new Map<string, LimitUsage>();
   for (const [test, usage] of limits) {
-    if (test === headroomTest) continue;
+    if (headroomTests.includes(test)) continue;
+    const testClass = test.split(".")[0];
+    const totals = totalsByClass.get(testClass) ?? {};
+    totalsByClass.set(testClass, totals);
     for (const [name, u] of Object.entries(usage)) {
       totals[name] ??= { used: 0, limit: u.limit };
       totals[name].used += u.used * (runCounts[test] ?? 1);
     }
   }
-  const percentOfLimit = Object.fromEntries(Object.entries(totals).map(([name, u]) => [name, percentOf(u)]));
-  const penalty = round(Object.values(percentOfLimit).reduce((sum, p) => sum + p, 0));
-  return { name: "Resource efficiency", weight: 1, percentOfLimit, penalty, score: halfScore(170, penalty) };
+  const classes = Object.fromEntries(
+    [...totalsByClass].map(([testClass, totals]) => {
+      const percentOfLimit = Object.fromEntries(Object.entries(totals).map(([name, u]) => [name, percentOf(u)]));
+      const penalty = round(Object.values(percentOfLimit).reduce((sum, p) => sum + p, 0));
+      return [testClass, { percentOfLimit, penalty, score: halfScore(170, penalty) }];
+    })
+  );
+  const scores = Object.values(classes).map((c) => c.score);
+  return { name: "Resource efficiency", weight: 1, classes, score: scores.length === 0 ? 100 : mean(scores) };
 }
 
 /** Streamline scripts log results as TEST|Class.method|PASS, FAIL or SKIP, and limit use as LIMITS|Class.method|{"name": {used, limit}}. */

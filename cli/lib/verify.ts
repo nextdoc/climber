@@ -33,36 +33,85 @@ export function skipReasons(dir: string): Map<string, string> {
 /** Verify compares the two versions, so it applies to behaviour changes only. */
 export const verifiable = (findings: Finding[]) => findings.filter((f) => f.kind === "B");
 
-/** Writes the verify step's inputs: the baseline classes renamed with a Baseline suffix, the final classes and the fixtures, and the findings. */
-export function prepareVerify(config: AscentConfig, findings: Finding[]): string {
-  const dir = verifyDir(config.name);
-  mkdirSync(join(dir, "input"), { recursive: true });
-  const apps = [...editableFiles(config)].filter((f) => f.endsWith(".cls")).sort();
-  const names = apps.map((f) => basename(f, ".cls"));
-  const rename = (text: string) => names.reduce((t, n) => t.replace(new RegExp(`\\b${n}\\b`, "g"), `${n}Baseline`), text);
+/**
+ * The classes one verify agent and its scripts work on: the climbed apps, and the fixtures and other classes they run with.
+ * There is one target per streamline suite, so each target's scripts stay under the Streamline size limit.
+ * A single target keeps the verify folder itself.
+ */
+export type VerifyTarget = { name: string; dir: string; apps: string[]; support: string[] };
+
+export function verifyTargets(config: AscentConfig): VerifyTarget[] {
+  const glob = (patterns: string[]) => [...new Set(patterns.flatMap((p) => globSync(p, { cwd: config.worktree })))].sort();
+  const editable = [...editableFiles(config)].filter((f) => f.endsWith(".cls"));
+  const targets = config.streamline
+    ? config.streamline.map((suite) => {
+        const classes = glob(suite.classes);
+        const apps = glob(suite.app ?? suite.classes).filter((f) => editable.includes(f));
+        return { apps, support: classes.filter((f) => !apps.includes(f)) };
+      })
+    : [{ apps: editable.sort(), support: fixtureFiles(config) }];
+  return targets.map((t) => {
+    const name = basename(t.apps[0] ?? "none", ".cls");
+    return { ...t, name, dir: targets.length === 1 ? verifyDir(config.name) : join(verifyDir(config.name), name) };
+  });
+}
+
+function fixtureFiles(config: AscentConfig): string[] {
   const testClasses = new Set([...config.testClasses.sample, ...config.testClasses.holdout]);
-  const fixtures = [...new Set(config.test.flatMap((p) => globSync(p, { cwd: config.worktree })))]
+  return [...new Set(config.test.flatMap((p) => globSync(p, { cwd: config.worktree })))]
     .filter((f) => f.endsWith(".cls") && !testClasses.has(basename(f, ".cls")))
     .sort();
+}
+
+/** The target whose apps hold every class the finding's evidence cites, else the first holding any of them. */
+export function findingTarget(finding: Finding, targets: VerifyTarget[]): VerifyTarget | undefined {
+  if (targets.length === 1) return targets[0];
+  const cited = finding.evidence.map((ref) => basename(ref.split(":")[0], ".cls"));
+  const names = (t: VerifyTarget) => t.apps.map((f) => basename(f, ".cls"));
+  return targets.find((t) => cited.every((c) => names(t).includes(c))) ?? targets.find((t) => cited.some((c) => names(t).includes(c)));
+}
+
+/**
+ * Writes each target's verify inputs: the baseline apps renamed with a Baseline suffix, the final apps and the support classes,
+ * and the findings routed to it. Returns the targets with findings, and the findings no target climbs.
+ */
+export function prepareVerify(
+  config: AscentConfig,
+  findings: Finding[]
+): { targets: { target: VerifyTarget; ids: string[] }[]; unrouted: string[] } {
   const show = (ref: string, file: string) => git(config.worktree, "show", `${ref}:${file}`);
-  const classes = [
-    ...apps.map((f) => extract(`${basename(f, ".cls")}Baseline.cls`, rename(show(config.baseCommit, f))).code),
-    ...apps.map((f) => extract(f, show("HEAD", f)).code),
-    ...fixtures.map((f) => extract(f, show("HEAD", f)).code)
-  ];
-  writeFileSync(join(dir, "input", "classes.apex"), classes.join("\n\n") + "\n");
-  writeFileSync(join(dir, "input", "findings.json"), JSON.stringify({ findings: verifiable(findings) }, null, 2) + "\n");
-  return dir;
+  const routed = new Map<VerifyTarget, Finding[]>();
+  const unrouted: string[] = [];
+  const targets = verifyTargets(config);
+  for (const f of verifiable(findings)) {
+    const target = findingTarget(f, targets);
+    if (target) routed.set(target, [...(routed.get(target) ?? []), f]);
+    else unrouted.push(f.id);
+  }
+  for (const [{ dir, apps, support }, routedFindings] of routed) {
+    mkdirSync(join(dir, "input"), { recursive: true });
+    const names = apps.map((f) => basename(f, ".cls"));
+    const rename = (text: string) => names.reduce((t, n) => t.replace(new RegExp(`\\b${n}\\b`, "g"), `${n}Baseline`), text);
+    const classes = [
+      ...apps.map((f) => extract(`${basename(f, ".cls")}Baseline.cls`, rename(show(config.baseCommit, f))).code),
+      ...apps.map((f) => extract(f, show("HEAD", f)).code),
+      ...support.map((f) => extract(f, show("HEAD", f)).code)
+    ];
+    writeFileSync(join(dir, "input", "classes.apex"), classes.join("\n\n") + "\n");
+    writeFileSync(join(dir, "input", "findings.json"), JSON.stringify({ findings: routedFindings }, null, 2) + "\n");
+  }
+  return { targets: [...routed].map(([target, fs]) => ({ target, ids: fs.map((f) => f.id) })), unrouted };
 }
 
 /** The prompt's text block from cli/prompts/anchor-verify.md, with its placeholders filled in. */
-export function verifyPrompt(name: string): string {
-  const dir = verifyDir(name);
+export function verifyPrompt(name: string, target: VerifyTarget): string {
+  const { dir } = target;
+  const targetOption = dir === verifyDir(name) ? "" : ` --target ${target.name}`;
   return promptText(VERIFY_PROMPT)
     .replaceAll("INPUT_DIR", join(dir, "input"))
     .replaceAll("OUTPUT_FILE", join(dir, "scenarios.apex"))
     .replaceAll("SKIP_FILE", join(dir, "skipped.json"))
-    .replaceAll("RUN_COMMAND", `bun cli/anchor.ts run-scenario ${name}`);
+    .replaceAll("RUN_COMMAND", `bun cli/anchor.ts run-scenario ${name}${targetOption}`);
 }
 
 /** One script per scenario and version, so each version runs in its own transaction with its own governor limits. */
@@ -89,8 +138,7 @@ export function verifyOutput(log: string, id: string, version: Version): { seede
 }
 
 /** Runs each scenario's two versions with Streamline and compares their outputs. */
-export async function runScenarios(config: AscentConfig, ids: string[]): Promise<ScenarioResult[]> {
-  const dir = verifyDir(config.name);
+export async function runScenarios(config: AscentConfig, dir: string, ids: string[]): Promise<ScenarioResult[]> {
   const scenarios = readFileSync(join(dir, "scenarios.apex"), "utf8");
   const classes = readFileSync(join(dir, "input", "classes.apex"), "utf8");
   const runs = join(dir, "runs");

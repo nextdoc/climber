@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Finding } from "./audit.ts";
 import type { VariantResult } from "./streamline.ts";
-import { scenarioResult, skipReasons, verifyOutput, type Version } from "./verify.ts";
+import { findingTarget, scenarioResult, skipReasons, verifyOutput, type VerifyTarget, type Version } from "./verify.ts";
 
 test("reads one version's outputs from its debug log, decoding Streamline's escapes", () => {
   const log = [
@@ -20,6 +21,27 @@ test("reads the agent's skip reasons, and none when it wrote no skipped.json", (
   expect(skipReasons(dir)).toEqual(new Map());
   writeFileSync(join(dir, "skipped.json"), JSON.stringify({ skipped: [{ id: "f5", reason: "depends on sharing" }] }));
   expect(skipReasons(dir)).toEqual(new Map([["f5", "depends on sharing"]]));
+});
+
+describe("findingTarget", () => {
+  const target = (name: string, ...apps: string[]): VerifyTarget => ({ name, dir: name, apps, support: [] });
+  const account = target("A", "classes/AccountHealthRollup.cls");
+  const caseSla = target("C", "classes/CaseSlaEscalation.cls", "classes/AccountHealthRollup.cls");
+  const cites = (...evidence: string[]) => ({ evidence }) as Finding;
+
+  test("routes a finding to the target that climbs every class its evidence cites", () => {
+    expect(findingTarget(cites("final/AccountHealthRollup.cls:12"), [account, caseSla])).toBe(account);
+    expect(findingTarget(cites("final/CaseSlaEscalation.cls:3", "baseline/AccountHealthRollup.cls:9"), [account, caseSla])).toBe(caseSla);
+  });
+
+  test("falls back to a target that climbs some cited class, and to none", () => {
+    expect(findingTarget(cites("final/CaseSlaEscalation.cls:3", "tests/CaseFixtures.cls:4"), [account, caseSla])).toBe(caseSla);
+    expect(findingTarget(cites("tests/CaseFixtures.cls:4"), [account, caseSla])).toBeUndefined();
+  });
+
+  test("routes every finding to a single target", () => {
+    expect(findingTarget(cites("tests/CaseFixtures.cls:4"), [account])).toBe(account);
+  });
 });
 
 describe("scenarioResult", () => {
