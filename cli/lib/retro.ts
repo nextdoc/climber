@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { matchesGlob } from "node:path";
 import { z } from "zod";
-import { classFiles, editableFiles, git, kept, type AscentConfig, type HistoryEntry } from "./ascent.ts";
+import { classFiles, editableFiles, git, kept, scoreOptions, type AscentConfig, type HistoryEntry } from "./ascent.ts";
+import { scoreRun, type ScoreResult } from "./scoring.ts";
 
 const Item = z.object({ title: z.string().min(1), detail: z.string().min(1) });
 
@@ -38,6 +39,15 @@ export function withCodes(reply: RetroReply) {
   };
 }
 
+/** The scores measured per headroom test or per test class, which a multi-class ascent averages into one dimension score. */
+export function unitScores(result: ScoreResult): Record<string, Record<string, number>> {
+  const units = (result.dimensions ?? [])
+    .map((d) => [d.name, (d.tests ?? d.classes) as Record<string, { score: number }> | undefined] as const)
+    .filter(([, byUnit]) => byUnit !== undefined)
+    .map(([name, byUnit]) => [name, Object.fromEntries(Object.entries(byUnit!).map(([u, s]) => [u, Math.round(s.score * 10) / 10]))]);
+  return Object.fromEntries(units);
+}
+
 /** The fixed inputs of a retrospective, all computed from the worktree and history. */
 export function retroInputs(config: AscentConfig, history: HistoryEntry[], specs: string[]) {
   const states = kept(history);
@@ -51,6 +61,8 @@ export function retroInputs(config: AscentConfig, history: HistoryEntry[], specs
     head,
     baselineScores: states[0].scores!,
     currentScores: states.at(-1)!.scores!,
+    baselineUnitScores: unitScores(scoreRun(scoreOptions(config, states[0].run!))),
+    currentUnitScores: unitScores(scoreRun(scoreOptions(config, states.at(-1)!.run!))),
     changedApplication: changed.filter((f) => editable.has(f)),
     changedTests: changed.filter((f) => holdout.has(f) || config.test.some((g) => matchesGlob(f, g))),
     diff: git(config.worktree, "diff", base, head, "--", ...[...editable].filter((f) => f.endsWith(".cls"))),
@@ -88,6 +100,8 @@ Application files changed: ${inputs.changedApplication.join(", ") || "none"}
 Test and fixture files changed: ${inputs.changedTests.join(", ") || "none"}
 Test classes: ${inputs.testFiles.join(", ")}
 Scores, baseline then evolved: ${JSON.stringify(inputs.baselineScores)} ${JSON.stringify(inputs.currentScores)}
+Limit headroom per headroom test and Resource efficiency per test class, baseline then evolved. Each dimension score above is their mean:
+${JSON.stringify(inputs.baselineUnitScores)} ${JSON.stringify(inputs.currentUnitScores)}
 
 Requirements:
 ${specs}

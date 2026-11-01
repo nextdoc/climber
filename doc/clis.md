@@ -42,7 +42,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 
 ## retro
 
-`bun cli/retro.ts <name>` writes a first-pass retrospective of an ascent to `target/ascents/<name>/retro.json` and adds it to the report. It gives one agent step fixed inputs: the diff from baseline to the evolved code, any test or fixture files changed, every iteration's reason, decision and learning, the scores, the test classes and any requirement documents. The reply has a fixed shape: a summary plus lists of behaviour changes (B1…), code patterns (P1…), test gaps (T1…) and other findings (X1…). Each item is free text with evidence.
+`bun cli/retro.ts <name>` writes a first-pass retrospective of an ascent to `target/ascents/<name>/retro.json` and adds it to the report. It gives one agent step fixed inputs: the diff from baseline to the evolved code, any test or fixture files changed, every iteration's reason, decision and learning, the scores with limit headroom per headroom test and resource efficiency per test class, the test classes and any requirement documents. The reply has a fixed shape: a summary plus lists of behaviour changes (B1…), code patterns (P1…), test gaps (T1…) and other findings (X1…). Each item is free text with evidence.
 
 The fixed shape makes ascents comparable, for example by the number and severity of behaviour changes each one introduced. It is a first pass, not a verdict. Any agent can replace it, skip it, or review the retrospective and the code for anything it missed.
 
