@@ -1,6 +1,8 @@
 # Climb Your Apex
 
-Agents improve Salesforce Apex code by hill climbing. The toolset is called climber for short. Each iteration plans one change, implements it, and scores it on weighted dimensions that you control. It keeps the change only if the scores rise without anything regressing. The out-of-the-box dimensions:
+Climber is a set of tools an AI agent uses to improve your Salesforce Apex code and tests. You point it at one or more classes and the agent tries one small change at a time. Each change gets a score that combines weighted tools (dimensions) such as tests, code coverage, static analysis and governor limit use, and you configure which tools count and how much. A change is kept only if the score goes up, so the code never gets worse. When the run ends you get a report of what changed and why.
+
+The out-of-the-box dimensions:
 
 - PMD: static analysis violations
 - Graph Engine: data flow and path analysis violations
@@ -10,18 +12,20 @@ Agents improve Salesforce Apex code by hill climbing. The toolset is called clim
 - Limit headroom: governor limit use for one batch of 200 records
 - Resource efficiency: governor limit use across the other tests
 
-To try it, follow the [quick start](#quick-start) to climb the included sample class in a scratch org.
+To try it, follow the [quick start](#quick-start) to climb the included sample classes in a scratch org.
 
-[![The report of a deploy-mode ascent of the sample class](doc/images/report.png)](https://nextdoc.github.io/climb-your-apex/account-health-deploy.html)
+[![The report of a deploy-mode ascent of the AccountHealthRollup sample class](doc/images/report.png)](https://nextdoc.github.io/climb-your-apex/account-health-deploy.html)
 
-The report of a deploy-mode ascent of the sample class. Click the image for the full report.
+The report of a deploy-mode ascent of the `AccountHealthRollup` sample class. Click the image for the full report.
 
 The project comes with two sample classes, each with its own test and deliberate weaknesses. Both use only the standard data model. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
 
 | Class | Test | Requirements | What it does |
 |---|---|---|---|
-| `AccountHealthRollup` | `AccountHealthRollupTest` | [doc/account-health-rollup.md](doc/account-health-rollup.md) | Rates accounts Hot, Warm or Cold and creates follow-up tasks. The default ascent config climbs this class. |
+| `AccountHealthRollup` | `AccountHealthRollupTest` | [doc/account-health-rollup.md](doc/account-health-rollup.md) | Rates accounts Hot, Warm or Cold and creates follow-up tasks. |
 | `CaseSlaEscalation` | `CaseSlaEscalationTest` | [doc/case-sla-escalation.md](doc/case-sla-escalation.md) | Escalates open cases past their first response target in business hours, and assigns those on Hot accounts to the account owner. It reads the account Rating that `AccountHealthRollup` sets, so a climb over both classes can catch a change in one that breaks the other. |
+
+The default ascent config, `ascent.config.json`, climbs both classes. Each class has its own headroom test and Streamline suite, scored on its own and averaged. `config/ascent.account-health-rollup.json` climbs `AccountHealthRollup` alone.
 
 An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura components, or other JavaScript code.
 
@@ -70,10 +74,15 @@ npm ci
 
 ## Quick start
 
-Climb the included sample class, `AccountHealthRollup`, and watch the report. The ascent in the image took 14 iterations, 0.8 hours and $11.26 in agent calls.
+Climb the included sample classes and watch the report. Choose one of two configs:
+
+- **One class (simpler).** `config/ascent.account-health-rollup.json` climbs `AccountHealthRollup` alone. The ascent in the image used this setup and took 14 iterations, 0.8 hours and $11.26 in agent calls.
+- **Both classes.** `ascent.config.json`, the default, climbs `AccountHealthRollup` and `CaseSlaEscalation` together. Expect more time and agent cost per iteration.
+
+The steps below use the one-class config. For both classes, leave out `-c` and its file.
 
 1. Follow the [installation](#installation) steps.
-2. Create a scratch org for the sample, using your Dev Hub:
+2. Create a scratch org for the samples, using your Dev Hub:
 
    ```sh
    sf org create scratch -f config/project-scratch-def.json -a climb-your-apex --target-dev-hub <dev hub alias>
@@ -82,7 +91,7 @@ Climb the included sample class, `AccountHealthRollup`, and watch the report. Th
 3. Start an ascent. This scores the baseline and writes the report.
 
    ```sh
-   bun cli/ascent-init.ts sample-1 -o climb-your-apex
+   bun cli/ascent-init.ts sample-1 -o climb-your-apex -c config/ascent.account-health-rollup.json
    open target/ascents/sample-1/report.html   # macOS. Use xdg-open on Linux or start on Windows.
    ```
 
@@ -99,7 +108,7 @@ The [Process](#process) section covers the retrospective and what to do after an
 Instructions for an agent using this project. The terms are defined in the [glossary](doc/glossary.md).
 
 1. Install the prerequisites above.
-2. Start an ascent with `bun cli/ascent-init.ts <name> -o <org>`. This scores the baseline. Open `target/ascents/<name>/report.html` in the operating system's default browser so the user can watch the climb.
+2. Start an ascent with `bun cli/ascent-init.ts <name> -o <org>`, adding `-c <config>` to climb a different set of classes. This scores the baseline. Open `target/ascents/<name>/report.html` in the operating system's default browser so the user can watch the climb.
 3. Run `bun cli/iterate.ts <name>` repeatedly until its summary reports `stop`.
 4. Write the retrospective with `bun cli/retro.ts <name>`, passing `-s <spec files>` when the project has a spec. In Streamline mode, run `bun cli/confirm.ts <name>` too.
 5. Show the user the report at `target/ascents/<name>/report.html`, then ask which path to take. Anchoring is optional.
@@ -140,8 +149,8 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 | [Scoring](doc/scoring.md) | Each dimension's source, formula and half-score penalty, the overall score, and how inputs are collected. |
 | [Streamline](doc/streamline.md) | The two uses of Streamline: planner probes, and Streamline mode as a faster alternative to deploy mode. Draft. |
 | [Caveats](doc/caveats.md) | Known limits on what the scores mean. |
-| [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the first sample class. |
-| [Case SLA Escalation](doc/case-sla-escalation.md) | The requirements for the second sample class. |
+| [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the `AccountHealthRollup` sample class. |
+| [Case SLA Escalation](doc/case-sla-escalation.md) | The requirements for the `CaseSlaEscalation` sample class. |
 | [Anchor](doc/anchor.md) | The optional steps that fix tests, code and spec from a scout ascent's drift, and each sample's inventory of weaknesses, defects and gaps. |
 | [References](doc/references.md) | Public research on agent loops and prompt optimisation that the project draws on. |
 
