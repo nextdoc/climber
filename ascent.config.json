@@ -1,10 +1,11 @@
 {
   "app": [
-    "force-app/**/classes/*.cls"
+    "force-app/**/classes/AccountHealthRollup.cls"
   ],
   "test": [
     "force-app/**/classes/*Test.cls",
-    "force-app/**/classes/Fixtures.cls"
+    "force-app/**/classes/Fixtures.cls",
+    "force-app/**/classes/CaseFixtures.cls"
   ],
   "testClasses": {
     "sample": [
