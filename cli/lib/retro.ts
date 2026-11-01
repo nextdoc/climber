@@ -113,6 +113,7 @@ Diff of the application classes from baseline to evolved:
 ${inputs.diff}
 
 Report:
+- summary: the main findings. When the ascent climbed several classes, also say which class drove each score change, and flag any class whose scores fell or barely moved.
 - behaviourChanges: every way the evolved code behaves differently from the baseline or the requirements, including cases the tests do not run:
   platform semantics of fields and queries it now relies on, sharing and user-mode access, governor limits at larger volumes, nulls and edge cases.
   Name the iterations that introduced each one, and say whether an existing test would fail if it were wrong.
@@ -122,7 +123,7 @@ Report:
 Give evidence as file:line or iteration numbers. Do not number the items.
 
 End your reply with one JSON object and nothing after it:
-{"summary": "two or three sentences", "behaviourChanges": [{"title": "", "detail": "", "evidence": "", "iterations": [1], "severity": "high|medium|low", "caughtByTests": false, "proposedTest": ""}],
+{"summary": "two to four sentences", "behaviourChanges": [{"title": "", "detail": "", "evidence": "", "iterations": [1], "severity": "high|medium|low", "caughtByTests": false, "proposedTest": ""}],
  "patterns": [{"title": "", "detail": "", "evidence": "", "verdict": "good|questionable|bad"}], "testGaps": [{"title": "", "detail": "", "proposedTest": ""}], "other": [{"title": "", "detail": ""}]}
 `;
 }
