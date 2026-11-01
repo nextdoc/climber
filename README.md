@@ -1,6 +1,10 @@
 # Climb Your Apex
 
-Climber is a set of tools an AI agent uses to improve your Salesforce Apex code and tests. You point it at one or more classes and the agent tries one small change at a time. Each change gets a score that combines weighted tools (dimensions) such as tests, code coverage, static analysis and governor limit use, and you configure which tools count and how much. A change is kept only if the score goes up, so the code never gets worse. When the run ends you get a report of what changed and why.
+Climber is a set of tools an AI agent uses to improve your Salesforce Apex code and tests. You point it at one or more classes and the agent tries one small change at a time.
+
+Each change gets a score that combines weighted tools (dimensions) such as tests, code coverage, static analysis and governor limit use, and you configure which tools count and how much.
+
+A change is kept only if the score goes up, so the code never gets worse. When the run ends you get a report of what changed and why.
 
 The out-of-the-box dimensions:
 
