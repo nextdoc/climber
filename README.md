@@ -52,6 +52,7 @@ An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura 
   11. [Bounded, unattended runs](doc/benefits.md#11-bounded-unattended-runs)
   12. [Cheaper models, any agent CLI](doc/benefits.md#12-cheaper-models-any-agent-cli)
   13. [Progress at a glance](doc/benefits.md#13-progress-at-a-glance)
+- G5: Maintain a vibrant community around this toolset and the ideas behind it. See [doc/community.md](doc/community.md) for the Slack invite and guidelines.
 
 ## Non-goals
 
@@ -156,6 +157,7 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 | [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the `AccountHealthRollup` sample class. |
 | [Case SLA Escalation](doc/case-sla-escalation.md) | The requirements for the `CaseSlaEscalation` sample class. |
 | [Anchor](doc/anchor.md) | The optional steps that fix tests, code and spec from a scout ascent's drift, and each sample's inventory of weaknesses, defects and gaps. |
+| [Community](doc/community.md) | The Slack invite and community guidelines. |
 | [References](doc/references.md) | Public research on agent loops and prompt optimisation that the project draws on. |
 
 ## Files overview
