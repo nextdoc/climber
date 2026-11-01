@@ -14,7 +14,7 @@ body{margin:0;padding:24px 16px;background:var(--surface);color:var(--text);font
 main{max-width:1280px;margin:0 auto}
 h1{font-size:20px;margin:0 0 4px}
 .meta{color:var(--muted);font-size:13px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px 16px}
-.meta b{color:var(--text);font-weight:500}
+.meta b{color:var(--text);font-weight:600}
 code{font:12px ui-monospace,monospace}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px;margin-bottom:24px}
 .card{border:1px solid var(--grid);border-radius:10px;padding:14px 16px;display:flex;gap:16px;align-items:center}
@@ -93,7 +93,7 @@ const when = t => new Date(t).toLocaleString();
 document.getElementById('meta').innerHTML = [
   ['Mode', esc(a.mode) + (a.plannerStreamline ? ' + planner probes' : '')], ['Org', esc(a.targetOrg)], ['Branch', `<code>${esc(a.branch)}</code>`], ['Base', `<code>${esc(a.baseCommit.slice(0, 8))}</code>`],
   ['Started', esc(when(a.createdAt))], ['Updated', esc(when(a.updatedAt))]
-].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+].map(([k, v]) => `<span><b>${k}:</b> ${v}</span>`).join('');
 
 const icon = d => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const icons = {
@@ -258,7 +258,7 @@ if (data.retro) {
   document.getElementById('retro-meta').innerHTML = [
     ['Commits', `<code>${esc(r.base.slice(0, 8))}..${esc(r.head.slice(0, 8))}</code>`], ['Written', esc(when(r.at))],
     ['Tests changed', esc(r.changedTests.join(', ') || 'none')]
-  ].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('');
+  ].map(([k, v]) => `<span><b>${k}:</b> ${v}</span>`).join('');
   document.getElementById('retro-summary').textContent = r.summary;
   const tone = {high: '--rejected', medium: '--gated', low: '--discard', good: '--keep', questionable: '--gated', bad: '--rejected'};
   const pill = v => `<span class="pill" style="background:${css(tone[v])}">${esc(v)}</span>`;
