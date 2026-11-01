@@ -16,7 +16,12 @@ To try it, follow the [quick start](#quick-start) to climb the included sample c
 
 The report of a deploy-mode ascent of the sample class. Click the image for the full report.
 
-The project comes with a sample class, `AccountHealthRollup`, and its test, `AccountHealthRollupTest`. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
+The project comes with two sample classes, each with its own test and deliberate weaknesses. Both use only the standard data model. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
+
+| Class | Test | Requirements | What it does |
+|---|---|---|---|
+| `AccountHealthRollup` | `AccountHealthRollupTest` | [doc/account-health-rollup.md](doc/account-health-rollup.md) | Rates accounts Hot, Warm or Cold and creates follow-up tasks. The default ascent config climbs this class. |
+| `CaseSlaEscalation` | `CaseSlaEscalationTest` | [doc/case-sla-escalation.md](doc/case-sla-escalation.md) | Escalates open cases past their first response target in business hours, and assigns those on Hot accounts to the account owner. It reads the account Rating that `AccountHealthRollup` sets, so a climb over both classes can catch a change in one that breaks the other. |
 
 An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura components, or other JavaScript code.
 
@@ -135,8 +140,9 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 | [Scoring](doc/scoring.md) | Each dimension's source, formula and half-score penalty, the overall score, and how inputs are collected. |
 | [Streamline](doc/streamline.md) | The two uses of Streamline: planner probes, and Streamline mode as a faster alternative to deploy mode. Draft. |
 | [Caveats](doc/caveats.md) | Known limits on what the scores mean. |
-| [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the sample class the ascents climb. |
-| [Anchor](doc/anchor.md) | The optional steps that fix tests, code and spec from a scout ascent's drift, and the sample's correctness inventory. |
+| [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the first sample class. |
+| [Case SLA Escalation](doc/case-sla-escalation.md) | The requirements for the second sample class. |
+| [Anchor](doc/anchor.md) | The optional steps that fix tests, code and spec from a scout ascent's drift, and each sample's inventory of weaknesses, defects and gaps. |
 | [References](doc/references.md) | Public research on agent loops and prompt optimisation that the project draws on. |
 
 ## Files overview

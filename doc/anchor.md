@@ -55,11 +55,15 @@ flowchart TD
 - **`strict`.** `iterate` gates each candidate with the baseline oracle, using the seed data verified in the last anchor. Any difference in output discards the candidate.
 - **`judged`.** A candidate that fails the oracle goes to a spec-judge agent step, which keeps it only when the difference improves adherence to the spec. The judge's reasoning is recorded in the history for review after the ascent. `ascent-init` refuses `judged` without a spec.
 
-## Inventory for the sample
+## Sample inventories
+
+Each sample class has a known list of weaknesses, defects and gaps, so an ascent or an audit can be checked against it. Codes are unique across the samples.
+
+### Account Health Rollup
 
 The original `AccountHealthRollup` was written as a naive baseline (commit `a06a7cb`), so its scoring weaknesses are deliberate. The correctness defects and gaps below were found by reviewing the ascents, and not all of them were planted. Line numbers refer to the original class on `main`.
 
-### Scoring weaknesses (deliberate)
+#### Scoring weaknesses (deliberate)
 
 | Code | Where | What |
 |---|---|---|
@@ -71,7 +75,7 @@ The original `AccountHealthRollup` was written as a naive baseline (commit `a06a
 | S6 | `:34`, `:38`, `:111`, `:168` | `System.debug` calls. |
 | S7 | `:55` | One long method with high cyclomatic and cognitive complexity. |
 
-### Defects against the spec
+#### Defects against the spec
 
 | Code | Where | What | Spec |
 |---|---|---|---|
@@ -79,7 +83,7 @@ The original `AccountHealthRollup` was written as a naive baseline (commit `a06a
 | D2 | `:157` | An open follow-up is any task whose status is not 'Completed', so a task closed with another status still blocks a new follow-up. | "an open task with the same subject" (`:47`) |
 | D3 | `:157`, `:167` | One query and one insert per follow-up fail past about 100 follow-ups or 150 inserts in one run. | "up to every account in the org" (`:60`) |
 
-### Spec gaps
+#### Spec gaps
 
 | Code | Question the spec leaves open |
 |---|---|
@@ -89,7 +93,7 @@ The original `AccountHealthRollup` was written as a naive baseline (commit `a06a
 | U4 | Should the run rate every account, or only those the running user can see and edit? |
 | U5 | Does "last 12 months" mean 365 days, and does a won opportunity with a future close date count? |
 
-### Test gaps
+#### Test gaps
 
 | Code | Missing scenario | Ascent drift it would have caught |
 |---|---|---|
@@ -102,3 +106,63 @@ The original `AccountHealthRollup` was written as a naive baseline (commit `a06a
 | T7 | A run by a user without View All Data | `ActivityHistories`, `OpenActivities` restriction (trial-3, deploy-probes-1) |
 | T8 | More than 200 accounts, and more than 100 follow-ups | D3, and dropping the 200-record chunks (all ascents) |
 | T9 | An account whose Rating does not change | Skipping the update when Rating is unchanged (streamline-1) |
+
+### Case SLA Escalation
+
+`CaseSlaEscalation` was written as a more naive baseline than `AccountHealthRollup`, with every item below planted, except that the spec gaps were left open on purpose. Its tests pass and cover 96% of the class. Line numbers refer to the original class on `main`.
+
+#### Scoring weaknesses (deliberate)
+
+| Code | Where | What |
+|---|---|---|
+| S8 | `CaseSlaEscalation.cls:1` | No sharing declaration, no FLS checks and no user mode. |
+| S9 | `:29` | The CRUD check calls `Schema.getGlobalDescribe()` once per case, about 14 ms each and most of the run's CPU. |
+| S10 | `:15`, `:66`, `:70` | Dynamic SOQL where static SOQL would do. The account and user queries concatenate values into the query string (injection). |
+| S11 | `:20` | Every CaseComment in the org is queried, with no filter. |
+| S12 | `:46` | A nested loop scans every comment for every case past its target. |
+| S13 | `:54`, `:66`, `:70` | Three queries per escalated case: the case again, its account, and the account owner. |
+| S14 | `:62`, `:78`, `:80`, `:88` | Three updates and an insert per escalated case. |
+| S15 | `:108` | Every open case is updated at the end of every run, whether it changed or not. |
+| S16 | `:15`, `:21`, `:24`, `:54`, `:66`, `:70` | Unused fields in every SELECT. |
+| S17 | `:38` | The priority targets map is rebuilt for every case. |
+| S18 | `:70` | The account owner is queried for every escalated case with an account, though only Hot accounts use it. |
+| S19 | `:14` | One method of about 95 lines, with ifs nested six deep and high cyclomatic and cognitive complexity. |
+| S20 | `:93` | An empty catch block that catches every exception. |
+| S21 | `:18`, `:25`, `:28`, `:43`, `:97`, `:109`, `:110` | `System.debug` calls, three of them once per case. |
+| S22 | `:6`, `:10`, `:14` | No ApexDoc on the public constructors and method. |
+
+#### Defects against the spec
+
+| Code | Where | What | Spec |
+|---|---|---|---|
+| D4 | `:44` | `>=` escalates a case whose age equals its target. | "its age is more than its target" |
+| D5 | `:86` | The comment's target is read after the priority is raised, so a Medium case's comment names 4 business hours instead of 8. | Escalation, Comment, and example 2 |
+| D6 | `:93` | A failed comment insert is swallowed. The case stays escalated without its comment and is still counted. | Escalation, Comment |
+| D7 | `:54`, `:66`, `:70` | Three queries per escalation exceed the 100 query limit at about 32 escalations in one run. | "up to every open case" |
+| D8 | `:86` | A case with no priority is escalated with the comment `within null business hours`. | Escalation, Comment |
+| D9 | `:20` | Querying every comment in the org fails once the org holds more than 50,000 comments, however few cases are open. | "Comments per case: up to 50" |
+| D10 | `:108` | Every open case is updated on every run, so cases that were not escalated get a new last modified date and fire case automation. | Escalation lists the changes "for each such case" only |
+
+#### Spec gaps
+
+| Code | Question the spec leaves open |
+|---|---|
+| U6 | Which target applies to a case with no priority or a custom priority? The code uses 24 hours, as for Low. |
+| U7 | Does any public comment count as a first response, or only one from a support user rather than the customer? The code counts any public comment. |
+| U8 | Should a closed and reopened case be escalated again? `IsEscalated` stays set, so the code never escalates it again. |
+| U9 | Should an escalated case be reassigned to the account owner when its account later becomes Hot? |
+| U10 | Should the run escalate every open case, or only those the running user can see and edit? |
+
+#### Test gaps
+
+| Code | Missing scenario | What it would catch |
+|---|---|---|
+| T10 | A case whose age equals its target | D4 |
+| T11 | The comment text on the Medium example | D5. The tests check the comment text only for example 1. |
+| T12 | A Low case past 24 business hours | The Low to Medium raise, which no test covers |
+| T13 | A comment insert that fails | D6 |
+| T14 | More than 32 escalations in one run | D7. The headroom test escalates 26 cases. |
+| T15 | Business hours that are not 24/7 | The scratch org's default business hours are 24/7, so a candidate that replaces `BusinessHours.diff` with clock hours passes every test. |
+| T16 | A case with no priority | U6 and D8 |
+| T17 | A run by a user who cannot edit cases | The CRUD check at `:29` |
+| T18 | An open case that is not escalated keeps its last modified date | D10, and dropping the final update entirely |
