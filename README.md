@@ -1,4 +1,4 @@
-# Climb Your Apex
+# Climber
 
 Climber is a set of tools an AI agent uses to improve your Salesforce Apex code and tests. You point it at one or more classes and the agent tries one small change at a time.
 
