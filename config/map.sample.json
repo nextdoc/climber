@@ -1,0 +1,31 @@
+{
+  "approved": false,
+  "groups": [
+    {
+      "id": "account-health",
+      "name": "Account health",
+      "description": "Rates accounts Hot, Warm or Cold and creates follow-up tasks.",
+      "classes": ["AccountHealthRollup"],
+      "tests": ["AccountHealthRollupTest"],
+      "fixtures": ["Fixtures"],
+      "headroomTest": "AccountHealthRollupTest.headroomAt200Accounts"
+    },
+    {
+      "id": "case-sla",
+      "name": "Case SLA escalation",
+      "description": "Escalates open cases past their first response target in business hours.",
+      "classes": ["CaseSlaEscalation"],
+      "tests": ["CaseSlaEscalationTest"],
+      "fixtures": ["CaseFixtures"],
+      "headroomTest": "CaseSlaEscalationTest.headroomAt200Cases"
+    },
+    {
+      "id": "contact-email",
+      "name": "Contact email",
+      "description": "Trims and lowercases contact email addresses.",
+      "classes": ["ContactEmailNormalizer"],
+      "tests": ["ContactEmailNormalizerTest"],
+      "headroomTest": "ContactEmailNormalizerTest.headroomAt200Contacts"
+    }
+  ]
+}

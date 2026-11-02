@@ -126,6 +126,22 @@ describe("CLIs", () => {
     expect(result.dimensions).toHaveLength(6);
   }, 30_000);
 
+  test("map gathers, scores every group without deploying, and renders both pages", () => {
+    rmSync(join(FAKE, "calls.log"), { force: true });
+    cli("map.ts", "gather", "s", "force-app/**/classes/*.cls");
+    const dir = join(REPO, "target/map/s");
+    const map = JSON.parse(readFileSync(join(dir, "map.json"), "utf8"));
+    expect(map.groups.map((g: { id: string }) => g.id)).toEqual(["account-health-rollup", "case-sla-escalation", "contact-email-normalizer"]);
+    cli("map.ts", "check", "s");
+    cli("map.ts", "render", "s");
+    const scores = JSON.parse(cli("map.ts", "score", "s", "-o", "org"));
+    expect(Object.keys(scores)).toHaveLength(3);
+    expect(scores["account-health-rollup"].skipped).toEqual(["Limit headroom"]);
+    expect(sfCalls()).not.toContain("deploy");
+    cli("map.ts", "render", "s", "--scores");
+    for (const page of ["before.html", "after.html"]) expect(existsSync(join(dir, page))).toBe(true);
+  }, 60_000);
+
   test("ascent-init scores the baseline without running Graph Engine", () => {
     rmSync(join(FAKE, "calls.log"), { force: true });
     const result = JSON.parse(cli("ascent-init.ts", "t", "-o", "org"));

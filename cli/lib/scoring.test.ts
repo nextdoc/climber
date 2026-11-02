@@ -59,3 +59,11 @@ test("gates on a variant that does not compile", () => {
   variants({ compiled: true, success: true }, { variant: "headroom", compiled: false, success: false, compileProblem: "Unexpected token" });
   expect(score()).toEqual({ gated: true, gate: "compile", gateDetail: "headroom: Unexpected token", overall: 0 });
 });
+
+test("without a deploy, gates on tests that did not run and otherwise scores", () => {
+  const opts = { app: [], test: [], run: RUN, root: RUN, headroomTest: [], skipDeploy: true, weights: { PMD: 0, "Graph Engine": 0, "Code coverage": 0, "Limit headroom": 0, "Resource efficiency": 0 } };
+  writeFileSync(join(RUN, "tests.json"), JSON.stringify({ message: "no org" }));
+  expect(scoreRun(opts)).toMatchObject({ gated: true, gate: "tests" });
+  writeFileSync(join(RUN, "tests.json"), JSON.stringify({ result: { summary: { testsRan: 2, passing: 1, failing: 1, testExecutionTime: "0 ms" } } }));
+  expect(scoreRun(opts)).toMatchObject({ gated: false, overall: 75 });
+});

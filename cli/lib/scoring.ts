@@ -28,6 +28,7 @@ export type Mode = "deploy" | "streamline";
 /**
  * headroomTest: the tests whose limit use scores limit headroom, one per climbed class.
  * runCounts: how many test runs each Streamline measured scenario stands for in resource efficiency. A missing scenario counts once.
+ * skipDeploy: in deploy mode, score code already in the org, with the tests having run standing in for the deploy's compile gate.
  */
 export type ScoreOptions = {
   app: string[];
@@ -38,6 +39,7 @@ export type ScoreOptions = {
   weights?: Weights;
   mode?: Mode;
   runCounts?: Record<string, number>;
+  skipDeploy?: boolean;
 };
 
 export type DimensionScore = { name: string; weight: number; score: number; [detail: string]: unknown };
@@ -246,7 +248,11 @@ function compileProblems(run: string, variants: VariantOutcome[], streamline: bo
 export function scoreRun(opts: ScoreOptions): ScoreResult {
   const streamline = opts.mode === "streamline";
   const variants: VariantOutcome[] = streamline ? readJson(join(opts.run, "streamline.json")) : [];
-  const compiled = streamline ? variants.every((v) => v.compiled) : readJson(join(opts.run, "deploy.json")).result?.success === true;
+  if (opts.skipDeploy && !streamline) {
+    const testsRan = !existsSync(join(opts.run, "tests.json")) || readJson(join(opts.run, "tests.json")).result?.summary !== undefined;
+    if (!testsRan) return { gated: true, gate: "tests", gateDetail: "the tests did not run", overall: 0 };
+  }
+  const compiled = streamline ? variants.every((v) => v.compiled) : opts.skipDeploy || readJson(join(opts.run, "deploy.json")).result?.success === true;
   if (!compiled) {
     return { gated: true, gate: "compile", gateDetail: compileProblems(opts.run, variants, streamline), overall: 0 };
   }

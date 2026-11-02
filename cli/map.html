@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apex map</title>
+<script src="https://cdn.jsdelivr.net/npm/vega@5.30.0/build/vega.min.js" integrity="sha384-em7CHpJd+SsMugVFf6TY7AKQcLWMcbPhD84hmNK8o6WFDkK+2uHSUQRVQV1/w827" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6.26.0/build/vega-embed.min.js" integrity="sha384-TqXb8su49m5OnEpKGO8m+VrgHesrUxyP22HgpXi4hnh1Hm43dXroiSYemNf5D8lv" crossorigin="anonymous"></script>
+<style>
+:root{--surface:#fcfcfb;--text:#0b0b0b;--muted:#52514e;--grid:#e6e5e0;--unscored:#b5b4ae;--low:#b8433a;--mid:#d9a425;--high:#1f7a3d}
+@media (prefers-color-scheme:dark){:root{--surface:#1a1a19;--text:#fff;--muted:#c3c2b7;--grid:#383835;--unscored:#5e5d59;--low:#e0675d;--mid:#e0b43c;--high:#4cc176}}
+body{margin:0;padding:24px 16px;background:var(--surface);color:var(--text);font:14px/1.4 system-ui,sans-serif}
+main{max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+.meta{color:var(--muted);font-size:13px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.meta b{color:var(--text);font-weight:600}
+code{font:12px ui-monospace,monospace}
+#map{width:100%}
+h2{font-size:16px;margin:24px 0 8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--grid)}
+td.n,th.n{text-align:right}
+.wrap{overflow-x:auto}
+#tip{position:fixed;z-index:10;display:none;max-width:360px;padding:10px 12px;background:var(--surface);color:var(--text);border:1px solid var(--grid);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.18);font-size:12px;pointer-events:none}
+#tip h3{font-size:14px;margin:0 0 2px}
+#tip p{color:var(--muted);margin:0 0 8px}
+#tip table{font-size:12px}
+#tip th,#tip td{padding:2px 6px 2px 0;vertical-align:top}
+#tip th{color:var(--muted);font-weight:500;white-space:nowrap}
+#tip .dims{margin-top:8px}
+#tip .dims th{color:var(--text);font-weight:600}
+#tip .bar{display:inline-block;height:8px;border-radius:2px;margin-right:6px;vertical-align:middle}
+#tip .skipped{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<h1>Apex map</h1>
+<div class="meta" id="meta"></div>
+<div id="map"></div>
+<div id="tip" role="tooltip"></div>
+<h2>Unmapped classes</h2>
+<div class="wrap" id="unmapped"></div>
+</main>
+<script>
+const data = /*DATA*/null;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+
+const groups = data.groups.map(g => ({id: g.id, name: g.name, description: g.description || '', classes: g.classes.join(', '), tests: [...g.tests, ...g.fixtures].join(', '),
+  appLines: g.lines.classes, testLines: g.lines.tests, size: g.lines.classes + g.lines.tests, score: g.score ? g.score.overall : null,
+  dimensions: g.score ? g.score.dimensions : {}, skipped: g.score ? g.score.skipped : [], gate: g.score && g.score.gate, changed: g.changed}));
+const byId = Object.fromEntries(groups.map(g => [g.id, g]));
+const scores = groups.filter(g => g.score != null).map(g => g.score);
+const total = groups.reduce((n, g) => n + g.size, 0);
+const unmappedLines = data.unmapped.reduce((n, u) => n + u.lines, 0);
+
+document.getElementById('meta').innerHTML = [
+  `<span><b>Source:</b> <code>${esc(data.source)}</code></span>`,
+  `<span><b>Groups:</b> ${groups.length}</span>`,
+  `<span><b>Mapped lines:</b> ${total}</span>`,
+  `<span><b>Unmapped lines:</b> ${unmappedLines}</span>`,
+  ...(data.scored ? [`<span><b>Scored:</b> ${scores.length} of ${groups.length}</span>`] : []),
+  `<span><b>Approved:</b> ${data.approved ? 'yes' : 'no'}</span>`].join('');
+
+document.getElementById('unmapped').innerHTML = data.unmapped.length === 0 ? '<p>Every class is mapped.</p>' :
+  '<table><thead><tr><th>Class</th><th>Path</th><th>Kind</th><th class="n">Lines</th><th>Reason</th></tr></thead><tbody>' +
+  data.unmapped.map(u => `<tr><td>${esc(u.name)}</td><td><code>${esc(u.path)}</code></td><td>${u.kind}</td><td class="n">${u.lines}</td><td>${esc(u.reason)}</td></tr>`).join('') +
+  '</tbody></table>';
+
+const low = scores.length ? Math.min(...scores) : 0;
+const one = n => n.toFixed(1);
+const colour = vega.scale('linear')().domain([0, 50, 100]).range([css('--low'), css('--mid'), css('--high')]).interpolate(vega.interpolate('hcl'));
+
+const row = (label, value) => `<tr><th>${label}</th><td>${value}</td></tr>`;
+
+function dimensionTable(g) {
+  const scored = Object.entries(g.dimensions).map(([name, score]) =>
+    `<tr><td>${esc(name)}</td><td class="n">${one(score)}</td><td><span class="bar" style="width:${Math.max(2, score * 0.8)}px;background:${colour(score)}"></span></td></tr>`);
+  const skipped = g.skipped.map(name => `<tr class="skipped"><td>${esc(name)}</td><td class="n">skipped</td><td>weight 0</td></tr>`);
+  return `<table class="dims"><thead><tr><th>Dimension</th><th class="n">Score</th><th></th></tr></thead><tbody>${[...scored, ...skipped].join('')}</tbody></table>`;
+}
+
+function tipHtml(g) {
+  const rows = [row('Id', `<code>${esc(g.id)}</code>`), row('Classes', esc(g.classes)), row('Tests', esc(g.tests) || 'none'),
+    row('Lines', `${g.appLines} class, ${g.testLines} test`)];
+  if (g.score != null) rows.push(row('Overall', `<b>${one(g.score)}</b>, the weighted mean of the dimensions`));
+  else if (data.scored) rows.push(row('Overall', 'unscored'));
+  if (g.gate) rows.push(row('Gate', esc(g.gate)));
+  if (g.changed) rows.push(row('Changed', 'classes or tests differ from the ones scored'));
+  return `<h3>${esc(g.name)}</h3>${g.description ? `<p>${esc(g.description)}</p>` : ''}<table>${rows.join('')}</table>${g.score != null ? dimensionTable(g) : ''}`;
+}
+
+const tip = document.getElementById('tip');
+function showTip(handler, event, item, id) {
+  if (id == null || !byId[id]) { tip.style.display = 'none'; return; }
+  tip.innerHTML = tipHtml(byId[id]);
+  tip.style.display = 'block';
+  const x = event.clientX + 14, y = event.clientY + 14;
+  tip.style.left = Math.max(8, Math.min(x, innerWidth - tip.offsetWidth - 8)) + 'px';
+  tip.style.top = (y + tip.offsetHeight > innerHeight - 8 ? event.clientY - tip.offsetHeight - 14 : y) + 'px';
+}
+const width = document.getElementById('map').clientWidth;
+vegaEmbed('#map', {
+  $schema: 'https://vega.github.io/schema/vega/v5.json', width, height: Math.round(Math.min(560, Math.max(320, width * 0.55))), padding: 0,
+  background: css('--surface'),
+  data: [{name: 'tree', values: [{id: '_root'}, ...groups.map(g => ({...g, parent: '_root'}))],
+    transform: [{type: 'stratify', key: 'id', parentKey: 'parent'},
+      {type: 'treemap', field: 'size', sort: {field: 'value', order: 'descending'}, round: true, method: 'squarify', size: [{signal: 'width'}, {signal: 'height'}]}]},
+    {name: 'leaves', source: 'tree', transform: [{type: 'filter', expr: "datum.id !== '_root'"}]}],
+  scales: [{name: 'colour', type: 'linear', domain: low === 100 ? [99, 100] : [low, (low + 100) / 2, 100], range: [css('--low'), css('--mid'), css('--high')], interpolate: 'hcl'}],
+  marks: [
+    {type: 'rect', from: {data: 'leaves'}, encode: {enter: {
+      x: {field: 'x0'}, y: {field: 'y0'}, x2: {field: 'x1'}, y2: {field: 'y1'}, stroke: {value: css('--surface')}, strokeWidth: {value: 2},
+      fill: [{test: 'datum.score == null', value: css('--unscored')}, {scale: 'colour', field: 'score'}],
+      tooltip: {field: 'id'}}}},
+    {type: 'text', from: {data: 'leaves'}, interactive: false, encode: {enter: {
+      x: {signal: 'datum.x0 + 10'}, y: {signal: 'datum.y0 + 10'}, baseline: {value: 'top'}, fill: {value: '#fff'}, fontSize: {value: 14}, fontWeight: {value: 600},
+      text: {field: 'name'}, limit: {signal: 'datum.x1 - datum.x0 - 20'}}}},
+    {type: 'text', from: {data: 'leaves'}, interactive: false, encode: {enter: {
+      x: {signal: 'datum.x0 + 10'}, y: {signal: 'datum.y0 + 30'}, baseline: {value: 'top'}, fill: {value: '#fff'}, fontSize: {value: 12},
+      text: {signal: "datum.size + ' lines' + (datum.score == null ? '' : ' · score ' + format(datum.score, '.1f'))"}, limit: {signal: 'datum.x1 - datum.x0 - 20'}}}}]
+}, {actions: false, tooltip: showTip});
+</script>
+</body>
+</html>
