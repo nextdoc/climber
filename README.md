@@ -6,6 +6,8 @@ Each change gets a score that combines weighted tools (dimensions) such as tests
 
 A change is kept only if the score goes up, so the code never gets worse. When the run ends you get a report of what changed and why.
 
+To decide where to climb, [mapping](doc/mapping.md) charts your Apex code as a treemap of groups of classes and tests. Each rectangle is sized by lines of code and coloured by its score, so a large red rectangle is a lot of code scoring poorly.
+
 The out-of-the-box dimensions:
 
 - PMD: static analysis violations
@@ -22,14 +24,15 @@ To try it, follow the [quick start](#quick-start) to climb the included sample c
 
 The report of a deploy-mode ascent of the `AccountHealthRollup` sample class. Click the image for the full report.
 
-The project comes with two sample classes, each with its own test and deliberate weaknesses. Both use only the standard data model. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
+The project comes with three sample classes, each with its own test. The first two have deliberate weaknesses. All three use only the standard data model. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
 
 | Class | Test | Requirements | What it does |
 |---|---|---|---|
 | `AccountHealthRollup` | `AccountHealthRollupTest` | [doc/account-health-rollup.md](doc/account-health-rollup.md) | Rates accounts Hot, Warm or Cold and creates follow-up tasks. |
 | `CaseSlaEscalation` | `CaseSlaEscalationTest` | [doc/case-sla-escalation.md](doc/case-sla-escalation.md) | Escalates open cases past their first response target in business hours, and assigns those on Hot accounts to the account owner. It reads the account Rating that `AccountHealthRollup` sets, so a climb over both classes can catch a change in one that breaks the other. |
+| `ContactEmailNormalizer` | `ContactEmailNormalizerTest` | none | Trims and lowercases contact email addresses. It scores near 100, as a contrast on the sample map. |
 
-The default ascent config, `ascent.config.json`, climbs both classes. Each class has its own headroom test and Streamline suite, scored on its own and averaged. `config/ascent.account-health-rollup.json` climbs `AccountHealthRollup` alone.
+The default ascent config, `ascent.config.json`, climbs the first two classes. Each class has its own headroom test and Streamline suite, scored on its own and averaged. `config/ascent.account-health-rollup.json` climbs `AccountHealthRollup` alone.
 
 An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura components, or other JavaScript code.
 
@@ -122,7 +125,14 @@ Instructions for an agent using this project. The terms are defined in the [glos
 
 ## Dependencies
 
-Node is used only for formatting. The dev dependencies are kept to that purpose:
+The CLIs run on Bun and use these dependencies:
+
+- `commander` - parses each CLI's arguments and options.
+- `zod` - defines and validates the config, history, map and scores files.
+- `@apexdevtools/apex-parser` - parses Apex to extract Streamline scenarios.
+- `@modelcontextprotocol/sdk` - calls the Streamline MCP server to run anonymous Apex.
+
+The dev dependencies are for formatting:
 
 - `prettier` - code formatter.
 - `prettier-plugin-apex` - formats Apex classes (`.cls`) and triggers (`.trigger`).
@@ -152,6 +162,7 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 | [CLIs](doc/clis.md) | Each CLI's purpose, options and outputs. |
 | [Glossary](doc/glossary.md) | The terms used across the tools and docs, such as ascent, iteration, dimension, margin and mode. |
 | [Scoring](doc/scoring.md) | Each dimension's source, formula and half-score penalty, the overall score, and how inputs are collected. |
+| [Mapping](doc/mapping.md) | Charting the codebase as a treemap of groups sized by lines and coloured by score, to choose what to climb. Early. |
 | [Streamline](doc/streamline.md) | The two uses of Streamline: planner probes, and Streamline mode as a faster alternative to deploy mode. Draft. |
 | [Caveats](doc/caveats.md) | Known limits on what the scores mean. |
 | [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the `AccountHealthRollup` sample class. |
@@ -195,6 +206,8 @@ target/
 
 A dimension with weight 0 skips its tool, so its file is absent.
 
+Each map has its own folder, `target/map/<name>/`, laid out in [Mapping](doc/mapping.md#output-naming).
+
 ## CLIs
 
 Each CLI is one file under `cli/`, run with Bun from the repo root. [CLIs](doc/clis.md) has the options for each.
@@ -205,4 +218,5 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. [CLIs](doc/c
 - [confirm](doc/clis.md#confirm) - deploy and score the start and best kept commits, to confirm a streamline ascent before merging.
 - [retro](doc/clis.md#retro) - write a first-pass retrospective of an ascent.
 - [anchor](doc/clis.md#anchor) - audit an ascent's drift, verify behaviour changes against the baseline, and review the findings. Work in progress.
+- [map](doc/clis.md#map) - gather, check, render and score a treemap of the codebase's groups, to choose which to climb.
 - [score-prepare and score](doc/clis.md#score-prepare-and-score) - collect the raw tool output for a run, then score it.

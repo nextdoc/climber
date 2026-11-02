@@ -292,6 +292,7 @@ export function scoreGroup(group: Group, root: string, org: string, folder: stri
 
 /** Scores each unscored group, largest first, saving the scores file after each so an interrupted pass resumes. */
 export function scoreMap(map: ProjectMap, root: string, org: string, dir: string, log = console.error): MapScores {
+  if (!map.approved) throw new Error('The map is not approved. Review before.html, then set "approved": true in the map file.');
   assertMap(map, root);
   const file = join(dir, "scores.json");
   const scores = loadScores(file);

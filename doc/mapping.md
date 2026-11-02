@@ -4,6 +4,10 @@
 
 Mapping charts the landscape of an org's Apex codebase as a treemap. Each group of classes and tests is a rectangle sized by its lines of code and coloured by its score. A large red rectangle is a lot of code scoring poorly, which is where climbing is likely to pay off most.
 
+![The scored map of the three sample classes, with the dimension scores of Account health in the hover](images/map.png)
+
+The scored map of the three sample classes. Hovering a group shows its classes, tests, line counts and the score of each dimension.
+
 ## Process
 
 ```mermaid
@@ -12,6 +16,7 @@ flowchart TD
   G --> M[/"map.json: groups by name matching, and unassigned classes"/]
   M --> A[Agent or user: merge groups by business area, place unassigned classes, add descriptions]
   A --> K[map check]
+  H[Agent or user: write map.json by hand] --> K
   K --> M2[/"map.json"/]
   M2 --> B[map render]
   B --> T[/"before.html: sized by lines"/]
@@ -25,10 +30,12 @@ flowchart TD
   TC --> P[User chooses which groups to climb]
 ```
 
-1. **Gather.** `map gather` selects the Apex files to map and groups them by name, with no agent. See [Default grouping](#default-grouping).
-2. **Refine.** An agent or the user edits `map.json`: merging groups by business area, placing unassigned classes and adding descriptions. An agent should start from the output of `map gather` rather than write the map from scratch, since gathering is fast and repeatable. `map check` validates the edited map.
+1. **Create.** `map.json` can be created in either of two ways:
+   - `map gather` selects the Apex files to map and groups them by name, with no agent, as a first pass for refining. See [Default grouping](#default-grouping).
+   - An agent or the user writes `map.json` by hand, following the [schema](#mapjson). A map without `source` still works, but the unmapped classes table then only finds classes in folders that hold a mapped class.
+2. **Refine.** An agent or the user edits `map.json`: merging groups by business area, placing unassigned classes and adding descriptions. `map check` validates the map, however it was created.
 3. **Render.** `map render` counts the non-blank lines in each group's classes and tests and draws the groups as a treemap. Each rectangle is a group, its area is the group's lines of code, and together the rectangles fill one outer rectangle that stands for the whole org.
-4. **Approve.** The user corrects the grouping and approves the map.
+4. **Approve.** The user corrects the grouping and approves the map by setting `"approved": true` in `map.json`. An approved map has no unassigned classes.
 5. **Score.** `map score` scores each group with the same dimensions and weights as an ascent baseline.
 6. **Colour.** `map render --scores` colours each rectangle by its group's overall score, from green at 100 to red at the lowest group score.
 7. **Choose.** The user uses the chart to pick the groups worth climbing.
@@ -48,7 +55,7 @@ Each command takes the map's name, like the ascent CLIs, and works in the map's 
 - `map gather` selects `.cls` files with include globs, then drops any that match an `-i, --ignore` glob. Globs are relative to `--root`, which defaults to the current folder. For example, `map gather sales 'force-app/**/classes/*.cls' -i '**/*Mock*.cls'`. It groups them as [Default grouping](#default-grouping) describes. The map records the root and globs it was gathered from, so it can be gathered again the same way.
 - `map check` validates the map against the schema, which rejects a class in two groups and an approved map with unassigned classes, and checks that every class it names exists exactly once under the root. `map render` and `map score` run the same checks first.
 - `map render` never writes to the map file. Line counts are worked out on every render.
-- `map score` scores the groups one at a time, largest first. It saves `scores.json` after each group and skips groups it already holds, so an interrupted pass resumes where it stopped.
+- `map score` refuses a map that isn't approved. It scores the groups one at a time, largest first. It saves `scores.json` after each group and skips groups it already holds, so an interrupted pass resumes where it stopped.
 - `map render --scores` warns when a group's classes or tests differ from the ones it was scored with.
 
 ### Quoting globs

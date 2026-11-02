@@ -134,6 +134,8 @@ describe("CLIs", () => {
     expect(map.groups.map((g: { id: string }) => g.id)).toEqual(["account-health-rollup", "case-sla-escalation", "contact-email-normalizer"]);
     cli("map.ts", "check", "s");
     cli("map.ts", "render", "s");
+    expect(() => cli("map.ts", "score", "s", "-o", "org")).toThrow("not approved");
+    writeFileSync(join(dir, "map.json"), JSON.stringify({ ...map, approved: true }));
     const scores = JSON.parse(cli("map.ts", "score", "s", "-o", "org"));
     expect(Object.keys(scores)).toHaveLength(3);
     expect(scores["account-health-rollup"].skipped).toEqual(["Limit headroom"]);

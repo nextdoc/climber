@@ -65,6 +65,28 @@ The fixed shape makes ascents comparable, for example by the number and severity
 
 `bun cli/anchor.ts review <name> [-f <findings>] [--open]` writes the review page `target/ascents/<name>/anchor/review.html` from the findings `verify` wrote. Each finding has decision buttons for its kind, kept in browser storage until the findings change, and a button copies the decisions as JSON to paste into the chat. `--open` opens the page in the default browser.
 
+## map
+
+`bun cli/map.ts <command> <name>` charts an org's Apex code as a treemap of groups of classes and tests, sized by lines and coloured by score, to show which groups are worth climbing. Each map has its own folder, `target/map/<name>/`. [Mapping](mapping.md) has the process, the grouping rules and the file shapes.
+
+`bun cli/map.ts gather <name> <globs...> [-i <globs...>]` selects class files with include globs, drops those an ignore glob matches, and groups them by name into `map.json`. Quote each glob so the map records the glob rather than the files a shell expanded it to ([Quoting globs](mapping.md#quoting-globs)). Gathering is optional: an agent or user can write `map.json` by hand instead, or refine what gather writes.
+
+`bun cli/map.ts check <name>` validates the map and checks that each class it names exists once under the root. It prints the errors and exits 1 when there are any.
+
+`bun cli/map.ts render <name>` writes `before.html`, a treemap sized by non-blank lines, with a table of the classes in no group. `--scores` writes `after.html` instead, coloured by `scores.json`, and warns about groups that have changed since they were scored.
+
+`bun cli/map.ts score <name> -o <org>` refuses a map that isn't approved. Once it is, it scores each group with the tests already in the org, largest first, and saves `scores.json` after each one, so an interrupted run resumes. It never deploys.
+
+| Option | Commands | Default | Description |
+|---|---|---|---|
+| `<name>` | all | required | Map name, used for its folder |
+| `<globs...>` | gather | required | Include globs, relative to the root |
+| `-i, --ignore <globs...>` | gather | none | Globs of files to leave out |
+| `--root <dir>` | all | gather: `.`, others: the map's source root | Folder the globs and class files are relative to |
+| `--map <file>` | check, render, score | `target/map/<name>/map.json` | Read the map from another file, such as `config/map.sample.json` |
+| `--scores` | render | off | Colour by score and write `after.html` |
+| `-o, --org <org>` | score | required | Org alias or username to run the tests in |
+
 ## score-prepare and score
 
 `cli/score-prepare.sh <org> <run folder> <test classes>` deploys `force-app`, runs PMD, Graph Engine and the tests, and saves the raw output and debug logs to the run folder. `bun cli/score.ts` scores that folder as defined in `doc/scoring.md`. `npm run score:prepare` and `npm run score` run them on this repo.

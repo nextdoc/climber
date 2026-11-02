@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { changedSinceScored, checkMap, gatherMap, groupLines, groupWeights, normaliseGlob, ProjectMap, shellExpanded, slug, unmappedClasses, type GroupScore } from "./map.ts";
+import { changedSinceScored, checkMap, gatherMap, groupLines, groupWeights, normaliseGlob, ProjectMap, scoreMap, shellExpanded, slug, unmappedClasses, type GroupScore } from "./map.ts";
 
 const group = (id: string, classes = ["A"], tests = ["ATest"]) => ({ id, name: id, classes, tests });
 
@@ -149,4 +149,9 @@ test("changedSinceScored finds groups whose classes or tests differ from the sco
   const map = ProjectMap.parse({ groups: [{ ...group("a"), fixtures: ["F"] }, group("b", ["B"], ["BTest"])] });
   const score = (classes: string[], tests: string[]): GroupScore => ({ overall: 50, dimensions: {}, skipped: [], classes, tests, run: "r", scoredAt: new Date().toISOString() });
   expect(changedSinceScored(map, { a: score(["A"], ["F", "ATest"]), b: score(["B"], ["BTest", "Old"]) }).map((g) => g.id)).toEqual(["b"]);
+});
+
+test("scoreMap refuses a map that is not approved, before touching the org", () => {
+  const dir = root({ "A.cls": "a", "ATest.cls": testClass() });
+  expect(() => scoreMap(ProjectMap.parse({ groups: [group("a")] }), dir, "org", join(dir, "map"))).toThrow("not approved");
 });
