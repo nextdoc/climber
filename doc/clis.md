@@ -13,10 +13,12 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. Ascent state
 | `-r, --repo <path>` | this repo | Git repo whose classes to climb. The worktree is created from it at `<repo>/target/worktrees/<name>` ([Streamline](streamline.md#another-repo)) |
 | `--from <ref>` | `HEAD` | Commit the ascent starts from |
 | `-c, --config <file>` | `ascent.config.json` | Ascent defaults to start from |
+| `-m, --mode <mode>` | `deploy` | `deploy` deploys and runs the Apex tests. `streamline` runs Streamline scripts without deploying, against a scratch org only |
+| `--planner-streamline` | off | Let the plan step run up to 5 anonymous Apex probes with Streamline, against a scratch org only ([Streamline](streamline.md#planner-probes)) |
 
 ## iterate
 
-`bun cli/iterate.ts <name>` runs one iteration: plan, implement, format, score, keep or discard, then learn. It prints a JSON summary, including `stop` and `stopReason` when every dimension is within its margin of 100 (the summit, where no candidate can be kept), when the ascent has reached `maxDiscards` consecutive discards, or `plateauDiscards` (default 3) consecutive discards whose focus dimensions did not rise by more than their margins.
+`bun cli/iterate.ts <name>` runs one iteration: plan, implement, format, score, keep or discard, then learn. It prints a JSON summary, including `stop` and `stopReason` when every dimension is within its margin of 100 (the summit, where no candidate can be kept), when the ascent has reached `maxDiscards` consecutive discards (5 in `ascent.config.json`), or `plateauDiscards` (default 3) consecutive discards whose focus dimensions did not rise by more than their margins.
 
 | Option | Default | Description |
 |---|---|---|
@@ -103,4 +105,8 @@ The fixed shape makes ascents comparable, for example by the number and severity
 | `-a, --app <globs...>` | required | Application Apex file globs |
 | `-t, --test <globs...>` | required | Test Apex file globs, removed from the application set |
 | `-r, --run <dir>` | `target/tmp/score` | Run folder |
+| `--headroom-test <tests...>` | required | Tests whose limit use scores limit headroom, one per climbed class, such as `AccountHealthRollupTest.headroomAt200Accounts` |
 | `--root <dir>` | `.` | Folder the globs and analyzer paths are relative to |
+| `-w, --weights <json>` | every dimension 1 | Weight per dimension, where 0 disables it, such as `'{"Graph Engine": 0}'` |
+| `-m, --mode <mode>` | `deploy` | `deploy` reads `deploy.json`, `tests.json` and the test logs. `streamline` reads `streamline.json` and the script logs |
+| `--run-counts <json>` | none | In Streamline mode, the test runs each measured scenario stands for in resource efficiency |

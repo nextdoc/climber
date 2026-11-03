@@ -25,7 +25,7 @@ Evidence:
 
 ## 2. Objective scoring, no self-grading
 
-The planner, the implementer and the scorer are separate. The harness deploys each candidate, runs PMD, Graph Engine and the tests, and scores it on the dimensions, weights and margins fixed at `ascent-init`. The harness decides keep or discard, not an agent. An agent cannot redefine success, skip a regression or declare victory early.
+The planner, the implementer and the scorer are separate. The harness deploys each candidate, or in Streamline mode runs it as anonymous Apex, runs PMD, Graph Engine and the tests, and scores it on the dimensions, weights and margins fixed at `ascent-init`. The harness decides keep or discard, not an agent. An agent cannot redefine success, skip a regression or declare victory early.
 
 The agent also cannot raise scores by weakening the tests. The implement step cannot run tests or deploy, and a change to a test or fixture is rejected. Holdout tests are hidden from the plan and implement steps, so a change that only satisfies the visible tests still fails.
 
@@ -64,7 +64,7 @@ Evidence:
 
 ## 6. Protection against regressions
 
-A candidate is kept only when its focus dimensions rise and no other dimension falls by more than its margin. Every test must pass, including the holdout tests. Raising one score at the expense of another is a discard, even when the focus improves.
+A candidate is kept only when its focus dimensions rise, no other dimension falls by more than its margin, and no dimension drops below half its best score. Every test must pass, including the holdout tests. Raising one score at the expense of another is a discard, even when the focus improves.
 
 Behaviour the tests do not pin can still change. The [anchor](anchor.md#anchor) finds those changes after an ascent.
 
@@ -102,7 +102,7 @@ Evidence:
 
 ## 10. Stop at any time
 
-The branch head is always deployed, tested and scored. An ascent can stop after any iteration, by choice or by its stop rules, and leave usable code. More iterations buy more improvement, not a chance to finish.
+The branch head always holds code that compiled, was tested and was scored. An ascent can stop after any iteration, by choice or by its stop rules, and leave usable code. More iterations buy more improvement, not a chance to finish.
 
 Evidence:
 

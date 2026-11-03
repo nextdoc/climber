@@ -166,10 +166,13 @@ Dependency versions are pinned to reduce supply chain risk. A version range woul
 | [Mapping](doc/mapping.md) | Charting the codebase as a treemap of groups sized by lines and coloured by score, to choose what to climb. Early. |
 | [Streamline](doc/streamline.md) | The two uses of Streamline: planner probes, and Streamline mode as a faster alternative to deploy mode. Draft. |
 | [Caveats](doc/caveats.md) | Known limits on what the scores mean. |
+| [Is it safe?](doc/is-it-safe.md) | Each way of using climber, from the quick start to an ascent in a sandbox, and what each changes in the org and the repo. |
+| [Benefits](doc/benefits.md) | Why climb with a harness instead of one open-ended agent session, and the research behind each practice. |
 | [Account Health Rollup](doc/account-health-rollup.md) | The requirements for the `AccountHealthRollup` sample class. |
 | [Case SLA Escalation](doc/case-sla-escalation.md) | The requirements for the `CaseSlaEscalation` sample class. |
 | [Anchor](doc/anchor.md) | The optional steps that fix tests, code and spec from a scout ascent's drift, and each sample's inventory of weaknesses, defects and gaps. |
 | [Community](doc/community.md) | The Slack invite and community guidelines. |
+| [Design](doc/design.md) | Ideas not yet built. |
 | [References](doc/references.md) | Public research on agent loops and prompt optimisation that the project draws on. |
 
 ## Files overview
@@ -189,15 +192,27 @@ target/
         ├── retro/
         │   ├── prompt.md         the retro step's prompt
         │   └── agent.txt         the retro step's raw output
+        ├── confirm.json          confirm's result for the start and best kept commits
+        ├── confirm/
+        │   ├── baseline/         the start commit's deploy-mode run
+        │   └── best/             the best kept commit's deploy-mode run
+        ├── anchor/
+        │   ├── audit/            the audit's inputs and findings.json
+        │   ├── verify/           the verify step's inputs and scenarios
+        │   ├── findings.json     the findings with their verify status
+        │   └── review.html       the page for deciding each finding
         ├── patches/
         │   └── <n>.patch         iteration n's candidate diff
         └── runs/
             └── <n>/              iteration n (0 is the baseline)
-                ├── deploy.json        deploy result, the compile gate
+                ├── deploy.json        deploy result, the compile gate (deploy mode)
                 ├── pmd.json           PMD violations
                 ├── sfge.json          Graph Engine violations
-                ├── tests.json         test results and coverage
-                ├── logs/              test debug logs, read for governor limit use
+                ├── tests.json         test results and coverage (deploy mode)
+                ├── logs/              test debug logs, or one log per variant in Streamline mode, read for governor limit use
+                ├── <variant>.apex     each composed Streamline script (Streamline mode)
+                ├── streamline.json    each variant's compile and run outcome (Streamline mode)
+                ├── extract-error.txt  why a class could not be adapted to anonymous Apex (Streamline mode)
                 ├── prepare.log        output of cli/score-prepare.sh
                 ├── <step>-prompt.md   the plan, implement and learn prompts
                 ├── <step>.txt         each step's raw output
@@ -205,7 +220,7 @@ target/
                 └── entry.json         the full history entry when it failed validation
 ```
 
-A dimension with weight 0 skips its tool, so its file is absent.
+A dimension with weight 0 skips its tool, so its file is absent. `confirm/`, `anchor/` and `retro/` exist only once those commands have run.
 
 Each map has its own folder, `target/map/<name>/`, laid out in [Mapping](doc/mapping.md#output-naming).
 
