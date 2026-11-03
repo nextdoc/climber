@@ -56,6 +56,7 @@ An Apex-only Salesforce DX project. There are no Lightning Web Components, Aura 
   12. [Cheaper models, any agent CLI](doc/benefits.md#12-cheaper-models-any-agent-cli)
   13. [Progress at a glance](doc/benefits.md#13-progress-at-a-glance)
 - G5: Maintain a vibrant community around this toolset and the ideas behind it. See [doc/community.md](doc/community.md) for the Slack invite and guidelines.
+- G6: Make it clear where the tools move from read only to side effects, and what each side effect is. See [doc/is-it-safe.md](doc/is-it-safe.md) for each way of using climber, from the quick start to a deploy-mode ascent in a sandbox.
 
 ## Non-goals
 
