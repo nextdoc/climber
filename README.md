@@ -24,7 +24,7 @@ To try it, follow the [quick start](#quick-start) to climb the included sample c
 
 The report of a deploy-mode ascent of the `AccountHealthRollup` sample class. Click the image for the full report.
 
-The project comes with three sample classes, each with its own test. The first two have deliberate weaknesses. All three use only the standard data model. Climb them with your agent in a separate scratch org to evaluate hill climbing on its own merits, before pointing it at your code.
+To get a feel for climbing without touching your own code, climb the three included sample classes with your agent in a separate scratch org. Each has its own test, and all three use only the standard data model. The first two have deliberate weaknesses. You can also [map](doc/mapping.md) them in the same scratch org to see an interactive version of the scored treemap.
 
 | Class | Test | Requirements | What it does |
 |---|---|---|---|
