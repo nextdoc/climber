@@ -75,7 +75,7 @@ The fixed shape makes ascents comparable, for example by the number and severity
 
 `bun cli/map.ts render <name>` writes `before.html`, a treemap sized by non-blank lines, with a table of the classes in no group. `--scores` writes `after.html` instead, coloured by `scores.json`, and warns about groups that have changed since they were scored.
 
-`bun cli/map.ts score <name> -o <org>` refuses a map that isn't approved. Once it is, it scores each group with the tests already in the org, largest first, and saves `scores.json` after each one, so an interrupted run resumes. It never deploys.
+`bun cli/map.ts score <name> -o <org>` refuses a map that isn't approved. Once it is, it runs PMD and Graph Engine over every mapped class and the map's test classes against the code already in the org, once, into `run/`. It then slices those outputs per group into `runs/<id>/`, scores each group and writes `scores.json`. Scoring again reuses `run/` while it covers the map's tests and classes. It never deploys.
 
 | Option | Commands | Default | Description |
 |---|---|---|---|
@@ -86,6 +86,7 @@ The fixed shape makes ascents comparable, for example by the number and severity
 | `--map <file>` | check, render, score | `target/map/<name>/map.json` | Read the map from another file, such as `config/map.sample.json` |
 | `--scores` | render | off | Colour by score and write `after.html` |
 | `-o, --org <org>` | score | required | Org alias or username to run the tests in |
+| `--fresh` | score | off | Run the tests and analyzers again instead of reusing `run/` |
 
 ## score-prepare and score
 

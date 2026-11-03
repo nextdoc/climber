@@ -1,7 +1,8 @@
-import { existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, globSync, readFileSync, writeFileSync } from "node:fs";
 import { join, posix, relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import { AscentDefaults, REPO_ROOT, run } from "./ascent.ts";
+import { AscentDefaults, REPO_ROOT } from "./ascent.ts";
+import { collected, collectRun, sliceRun } from "./map-run.ts";
 import { DIMENSION_NAMES, scoreRun, type Weights } from "./scoring.ts";
 
 const TEMPLATE = join(REPO_ROOT, "cli/map.html");
@@ -20,7 +21,9 @@ const Group = z.strictObject({
   classes: z.array(ClassName).min(1),
   tests: z.array(ClassName),
   fixtures: z.array(ClassName).default([]),
-  headroomTest: z.string().regex(/^\w+\.\w+$/, "Class.method").optional()
+  headroomTest: z.string().regex(/^\w+\.\w+$/, "Class.method").optional(),
+  /** Tagging: one value per facet, such as { "version": "v3" }. */
+  tags: z.record(z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "a kebab-case facet"), z.string().min(1)).optional()
 });
 
 export type Group = z.infer<typeof Group>;
@@ -257,26 +260,11 @@ export function groupWeights(group: Group, defaults: Weights): { weights: Weight
   return { weights: { ...defaults, ...Object.fromEntries(skipped.map((d) => [d, 0])) }, skipped: skipped.filter((d) => (defaults[d] ?? 1) > 0) };
 }
 
-/** Runs the group's tests already in the org, analyses its classes and scores them like an ascent baseline, without deploying. */
-export function scoreGroup(group: Group, root: string, org: string, folder: string): GroupScore {
-  const index = indexClasses(root);
-  const defaults = AscentDefaults.parse(readJson(join(REPO_ROOT, "ascent.config.json")));
-  const { weights, skipped } = groupWeights(group, defaults.weights);
-  const off = (...names: string[]) => (names.every((n) => weights[n] === 0) ? "1" : "");
+/** Scores a group from its slice of the map's run, like an ascent baseline, without deploying. */
+function scoreGroup(group: Group, root: string, folder: string, defaults: Weights, index: Map<string, string[]>): GroupScore {
+  const { weights, skipped } = groupWeights(group, defaults);
   const app = group.classes.map((n) => pathOf(index, n));
   const test = [...group.tests, ...group.fixtures].map((n) => pathOf(index, n));
-  mkdirSync(folder, { recursive: true });
-  const result = run(join(REPO_ROOT, "cli/score-prepare.sh"), [org, folder, group.tests.join(",")], root, undefined, {
-    ANALYZER_CONFIG: join(REPO_ROOT, "code-analyzer.yml"),
-    ANALYZER_TARGETS: app.join(","),
-    SKIP_DEPLOY: "1",
-    SKIP_PMD: off("PMD"),
-    SKIP_SFGE: off("Graph Engine"),
-    SKIP_TESTS: off(...TEST_DIMENSIONS),
-    SKIP_LOGS: off("Limit headroom", "Resource efficiency")
-  });
-  writeFileSync(join(folder, "prepare.log"), result.stdout + result.stderr);
-  if (result.status !== 0) throw new Error(`score-prepare failed for ${group.id}, see ${join(folder, "prepare.log")}`);
   const score = scoreRun({ app, test, run: folder, root, weights, skipDeploy: true, headroomTest: group.headroomTest ? [group.headroomTest] : [] });
   return GroupScore.parse({
     overall: score.overall,
@@ -290,20 +278,25 @@ export function scoreGroup(group: Group, root: string, org: string, folder: stri
   });
 }
 
-/** Scores each unscored group, largest first, saving the scores file after each so an interrupted pass resumes. */
-export function scoreMap(map: ProjectMap, root: string, org: string, dir: string, log = console.error): MapScores {
+/** Collects the map's run unless one already covers it, or fresh is set, then slices it and scores every group. */
+export async function scoreMap(map: ProjectMap, root: string, org: string, dir: string, fresh = false, log = console.error): Promise<MapScores> {
   if (!map.approved) throw new Error('The map is not approved. Review before.html, then set "approved": true in the map file.');
   assertMap(map, root);
-  const file = join(dir, "scores.json");
-  const scores = loadScores(file);
   const index = indexClasses(root);
-  const size = (g: Group) => Object.values(groupLines(g, root, index)).reduce((a, b) => a + b, 0);
-  const todo = map.groups.filter((g) => !scores[g.id]).sort((a, b) => size(b) - size(a));
-  for (const group of todo) {
-    log(`Scoring ${group.id}`);
-    scores[group.id] = scoreGroup(group, root, org, join(dir, "runs", group.id));
-    writeJson(file, MapScores.parse(scores));
-    log(`${group.id}: ${scores[group.id].overall}`);
-  }
+  const { weights } = AscentDefaults.parse(readJson(join(REPO_ROOT, "ascent.config.json")));
+  const off = (...names: string[]) => names.every((n) => weights[n] === 0);
+  const tests = map.groups.flatMap((g) => g.tests).sort();
+  const skipTests = tests.length === 0 || off(...TEST_DIMENSIONS);
+  const collection = {
+    tests,
+    targets: map.groups.flatMap((g) => g.classes.map((n) => pathOf(index, n))).sort(),
+    skip: { pmd: off("PMD"), sfge: off("Graph Engine"), tests: skipTests, logs: skipTests || off("Limit headroom", "Resource efficiency") }
+  };
+  const runDir = join(dir, "run");
+  if (fresh || !collected(runDir, collection)) await collectRun(org, root, runDir, collection, log);
+  else log(`Reusing ${runDir}`);
+  sliceRun(runDir, root, map.groups.map((g) => ({ id: g.id, tests: g.tests, app: g.classes.map((n) => pathOf(index, n)) })), join(dir, "runs"));
+  const scores = MapScores.parse(Object.fromEntries(map.groups.map((g) => [g.id, scoreGroup(g, root, join(dir, "runs", g.id), weights, index)])));
+  writeJson(join(dir, "scores.json"), scores);
   return scores;
 }

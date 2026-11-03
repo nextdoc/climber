@@ -150,7 +150,7 @@ type LimitUsage = Record<string, { used: number; limit: number }>;
 
 /**
  * Reads each test's TESTING_LIMITS block, which covers only code between Test.startTest and Test.stopTest.
- * Tests without the block, such as ones that never call Test.startTest, are absent.
+ * Tests without the block, such as ones that never call Test.startTest, are absent. A namespaced org prefixes test names with its namespace, which is dropped.
  */
 function testLimits(log: string): Map<string, LimitUsage> {
   const byTest = new Map<string, LimitUsage>();
@@ -163,7 +163,7 @@ function testLimits(log: string): Map<string, LimitUsage> {
     for (const [, name, used, limit] of defaultNamespace.matchAll(/^\s+(.+): (\d+) out of (\d+)/gm)) {
       if (GOVERNOR_LIMITS.includes(name)) usage[name] = { used: Number(used), limit: Number(limit) };
     }
-    byTest.set(sections[i], usage);
+    byTest.set(sections[i].split(".").slice(-2).join("."), usage);
   }
   return byTest;
 }

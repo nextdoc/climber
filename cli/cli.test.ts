@@ -27,10 +27,22 @@ esac
 
 const violation = { engine: "pmd", rule: "R", message: "m", severity: 3, primaryLocationIndex: 0, locations: [{ file: APP_CLASS, startLine: 1 }] };
 
+const testMethod = (MethodName: string) => ({ ApexClass: { Name: "AccountHealthRollupTest" }, MethodName, Outcome: "Pass", RunTime: 2000 });
+
 const TESTS = {
   result: {
     summary: { testsRan: 2, passing: 2, failing: 0, testExecutionTime: "4000 ms" },
-    coverage: { coverage: [{ name: "AccountHealthRollup", totalLines: 10, totalCovered: 9 }] }
+    tests: [testMethod("headroomAt200Accounts"), testMethod("other")],
+    coverage: {
+      coverage: [{ name: "AccountHealthRollup", totalLines: 10, totalCovered: 9 }],
+      records: [
+        {
+          ApexTestClass: { Name: "AccountHealthRollupTest" },
+          ApexClassOrTrigger: { Name: "AccountHealthRollup" },
+          Coverage: { coveredLines: [1, 2, 3, 4, 5, 6, 7, 8, 9], uncoveredLines: [10] }
+        }
+      ]
+    }
   }
 };
 
@@ -86,7 +98,7 @@ beforeAll(() => {
   writeFileSync(join(FAKE, "pmd.json"), JSON.stringify({ violations: [violation] }));
   writeFileSync(join(FAKE, "sfge.json"), JSON.stringify({ violations: [] }));
   writeFileSync(join(FAKE, "tests.json"), JSON.stringify(TESTS));
-  writeFileSync(join(FAKE, "test.log"), testLog("AccountHealthRollupTest.headroomAt200Accounts") + testLog("AccountHealthRollupTest.other"));
+  writeFileSync(join(FAKE, "test.log"), testLog("ns.AccountHealthRollupTest.headroomAt200Accounts") + testLog("ns.AccountHealthRollupTest.other"));
 
   for (const path of ["cli", "force-app", ".prettierrc", ".prettierignore", ".gitignore"]) {
     cpSync(join(REPO_ROOT, path), join(REPO, path), { recursive: true });
@@ -139,7 +151,16 @@ describe("CLIs", () => {
     const scores = JSON.parse(cli("map.ts", "score", "s", "-o", "org"));
     expect(Object.keys(scores)).toHaveLength(3);
     expect(scores["account-health-rollup"].skipped).toEqual(["Limit headroom"]);
+    expect(scores["account-health-rollup"].dimensions["Code coverage"]).toBe(90);
+    expect(existsSync(join(dir, "runs/account-health-rollup/logs/test.log"))).toBe(true);
+    expect(sfCalls()).toContain("--detailed-coverage");
     expect(sfCalls()).not.toContain("deploy");
+    expect(sfCalls().match(/apex run test/g)).toHaveLength(1);
+    rmSync(join(FAKE, "calls.log"));
+    cli("map.ts", "score", "s", "-o", "org");
+    expect(existsSync(join(FAKE, "calls.log"))).toBe(false);
+    cli("map.ts", "score", "s", "-o", "org", "--fresh");
+    expect(sfCalls()).toContain("apex run test");
     cli("map.ts", "render", "s", "--scores");
     for (const page of ["before.html", "after.html"]) expect(existsSync(join(dir, page))).toBe(true);
   }, 60_000);

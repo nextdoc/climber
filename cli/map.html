@@ -15,7 +15,7 @@ h1{font-size:20px;margin:0 0 4px}
 .meta{color:var(--muted);font-size:13px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:4px 16px}
 .meta b{color:var(--text);font-weight:600}
 code{font:12px ui-monospace,monospace}
-#map{width:100%}
+#map{width:100%;position:relative}
 h2{font-size:16px;margin:24px 0 8px}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--grid)}
@@ -31,11 +31,22 @@ td.n,th.n{text-align:right}
 #tip .dims th{color:var(--text);font-weight:600}
 #tip .bar{display:inline-block;height:8px;border-radius:2px;margin-right:6px;vertical-align:middle}
 #tip .skipped{color:var(--muted)}
+.head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 16px}
+.filter{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.filter .pill{margin:0}
+.clear{font:inherit;font-size:12px;color:var(--text);background:none;border:1px solid var(--grid);border-radius:4px;padding:1px 8px;cursor:pointer}
+.pill{display:inline-block;margin:0 4px 4px 0;padding:0 8px;border:0;border-radius:999px;background:var(--pill-light);color:#111;font:11px/18px system-ui,sans-serif;white-space:nowrap;cursor:pointer}
+@media (prefers-color-scheme:dark){.pill{background:var(--pill-dark);color:#fff}}
+.pills{position:absolute;overflow:hidden;pointer-events:none}
+.pills .pill{pointer-events:auto}
+.faded{opacity:.15}
+.hide{margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer}
+.hide[hidden]{display:none}
 </style>
 </head>
 <body>
 <main>
-<h1>Apex map</h1>
+<div class="head"><h1>Apex map</h1><div class="filter" id="filter"></div></div>
 <div class="meta" id="meta"></div>
 <div id="map"></div>
 <div id="tip" role="tooltip"></div>
@@ -48,7 +59,8 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
 
 const groups = data.groups.map(g => ({id: g.id, name: g.name, description: g.description || '', classes: g.classes.join(', '), tests: [...g.tests, ...g.fixtures].join(', '),
-  appLines: g.lines.classes, testLines: g.lines.tests, size: g.lines.classes + g.lines.tests, score: g.score ? g.score.overall : null,
+  tags: Object.entries(g.tags || {}).map(([facet, value]) => ({facet, value, key: `${facet}=${value}`})),
+  tagKeys: Object.entries(g.tags || {}).map(([facet, value]) => `${facet}=${value}`), appLines: g.lines.classes, testLines: g.lines.tests, size: g.lines.classes + g.lines.tests, score: g.score ? g.score.overall : null,
   dimensions: g.score ? g.score.dimensions : {}, skipped: g.score ? g.score.skipped : [], gate: g.score && g.score.gate, changed: g.changed}));
 const byId = Object.fromEntries(groups.map(g => [g.id, g]));
 const scores = groups.filter(g => g.score != null).map(g => g.score);
@@ -61,7 +73,8 @@ document.getElementById('meta').innerHTML = [
   `<span><b>Mapped lines:</b> ${total}</span>`,
   `<span><b>Unmapped lines:</b> ${unmappedLines}</span>`,
   ...(data.scored ? [`<span><b>Scored:</b> ${scores.length} of ${groups.length}</span>`] : []),
-  `<span><b>Approved:</b> ${data.approved ? 'yes' : 'no'}</span>`].join('');
+  `<span><b>Approved:</b> ${data.approved ? 'yes' : 'no'}</span>`,
+  `<label class="hide" id="hide" hidden><input type="checkbox" id="hide-filtered"> Hide filtered groups</label>`].join('');
 
 document.getElementById('unmapped').innerHTML = data.unmapped.length === 0 ? '<p>Every class is mapped.</p>' :
   '<table><thead><tr><th>Class</th><th>Path</th><th>Kind</th><th class="n">Lines</th><th>Reason</th></tr></thead><tbody>' +
@@ -74,6 +87,11 @@ const colour = vega.scale('linear')().domain([0, 50, 100]).range([css('--low'), 
 
 const row = (label, value) => `<tr><th>${label}</th><td>${value}</td></tr>`;
 
+// Golden-angle hue steps keep every tag's colour distinct.
+const hue = Object.fromEntries([...new Set(groups.flatMap(g => g.tagKeys))].sort().map((k, i) => [k, Math.round(i * 137.508) % 360]));
+const pill = t => `<button type="button" class="pill" data-tag="${esc(t.key)}" title="${esc(t.facet)}: ${esc(t.value)}"
+  style="--pill-light:hsl(${hue[t.key]} 70% 85%);--pill-dark:hsl(${hue[t.key]} 45% 32%)">${esc(t.value)}</button>`;
+
 function dimensionTable(g) {
   const scored = Object.entries(g.dimensions).map(([name, score]) =>
     `<tr><td>${esc(name)}</td><td class="n">${one(score)}</td><td><span class="bar" style="width:${Math.max(2, score * 0.8)}px;background:${colour(score)}"></span></td></tr>`);
@@ -83,7 +101,7 @@ function dimensionTable(g) {
 
 function tipHtml(g) {
   const rows = [row('Id', `<code>${esc(g.id)}</code>`), row('Classes', esc(g.classes)), row('Tests', esc(g.tests) || 'none'),
-    row('Lines', `${g.appLines} class, ${g.testLines} test`)];
+    row('Lines', `${g.appLines} class, ${g.testLines} test`), ...g.tags.map(t => row(esc(t.facet), pill(t)))];
   if (g.score != null) rows.push(row('Overall', `<b>${one(g.score)}</b>, the weighted mean of the dimensions`));
   else if (data.scored) rows.push(row('Overall', 'unscored'));
   if (g.gate) rows.push(row('Gate', esc(g.gate)));
@@ -100,27 +118,58 @@ function showTip(handler, event, item, id) {
   tip.style.left = Math.max(8, Math.min(x, innerWidth - tip.offsetWidth - 8)) + 'px';
   tip.style.top = (y + tip.offsetHeight > innerHeight - 8 ? event.clientY - tip.offsetHeight - 14 : y) + 'px';
 }
+
+let view, filter = '';
+function drawPills() {
+  const map = document.getElementById('map');
+  map.querySelectorAll('.pills').forEach(el => el.remove());
+  map.insertAdjacentHTML('beforeend', view.data('leaves').map(d =>
+    `<div class="pills${filter !== '' && !d.tagKeys.includes(filter) ? ' faded' : ''}" style="left:${d.x0 + 10}px;top:${d.y0 + 48}px;width:${Math.max(0, d.x1 - d.x0 - 20)}px;height:${Math.max(0, d.y1 - d.y0 - 52)}px">${d.tags.map(pill).join('')}</div>`).join(''));
+}
+async function setFilter(key) {
+  filter = key;
+  const t = groups.flatMap(g => g.tags).find(t => t.key === key);
+  document.getElementById('filter').innerHTML = t ? `Filter: ${pill(t)} <button type="button" class="clear">Clear</button>` : '';
+  document.getElementById('hide').hidden = !t;
+  await view.signal('tagFilter', key).runAsync();
+  drawPills();
+}
+document.getElementById('hide-filtered').addEventListener('change', async event => {
+  await view.signal('hideFiltered', event.target.checked).runAsync();
+  drawPills();
+});
+document.addEventListener('click', event => {
+  const p = event.target.closest('.pill');
+  if (p) setFilter(p.dataset.tag === filter ? '' : p.dataset.tag);
+  else if (event.target.closest('.clear')) setFilter('');
+});
+
+const fade = {opacity: [{test: "tagFilter && indexof(datum.tagKeys, tagFilter) < 0", value: 0.15}, {value: 1}]};
 const width = document.getElementById('map').clientWidth;
 vegaEmbed('#map', {
   $schema: 'https://vega.github.io/schema/vega/v5.json', width, height: Math.round(Math.min(560, Math.max(320, width * 0.55))), padding: 0,
-  background: css('--surface'),
+  background: css('--surface'), signals: [{name: 'tagFilter', value: ''}, {name: 'hideFiltered', value: false}],
   data: [{name: 'tree', values: [{id: '_root'}, ...groups.map(g => ({...g, parent: '_root'}))],
-    transform: [{type: 'stratify', key: 'id', parentKey: 'parent'},
+    transform: [{type: 'filter', expr: "datum.id === '_root' || !hideFiltered || !tagFilter || indexof(datum.tagKeys, tagFilter) >= 0"},
+      {type: 'stratify', key: 'id', parentKey: 'parent'},
       {type: 'treemap', field: 'size', sort: {field: 'value', order: 'descending'}, round: true, method: 'squarify', size: [{signal: 'width'}, {signal: 'height'}]}]},
     {name: 'leaves', source: 'tree', transform: [{type: 'filter', expr: "datum.id !== '_root'"}]}],
   scales: [{name: 'colour', type: 'linear', domain: low === 100 ? [99, 100] : [low, (low + 100) / 2, 100], range: [css('--low'), css('--mid'), css('--high')], interpolate: 'hcl'}],
   marks: [
-    {type: 'rect', from: {data: 'leaves'}, encode: {enter: {
+    {type: 'rect', from: {data: 'leaves'}, encode: {update: {...fade,
       x: {field: 'x0'}, y: {field: 'y0'}, x2: {field: 'x1'}, y2: {field: 'y1'}, stroke: {value: css('--surface')}, strokeWidth: {value: 2},
       fill: [{test: 'datum.score == null', value: css('--unscored')}, {scale: 'colour', field: 'score'}],
       tooltip: {field: 'id'}}}},
-    {type: 'text', from: {data: 'leaves'}, interactive: false, encode: {enter: {
+    {type: 'text', from: {data: 'leaves'}, interactive: false, encode: {update: {...fade,
       x: {signal: 'datum.x0 + 10'}, y: {signal: 'datum.y0 + 10'}, baseline: {value: 'top'}, fill: {value: '#fff'}, fontSize: {value: 14}, fontWeight: {value: 600},
       text: {field: 'name'}, limit: {signal: 'datum.x1 - datum.x0 - 20'}}}},
-    {type: 'text', from: {data: 'leaves'}, interactive: false, encode: {enter: {
+    {type: 'text', from: {data: 'leaves'}, interactive: false, encode: {update: {...fade,
       x: {signal: 'datum.x0 + 10'}, y: {signal: 'datum.y0 + 30'}, baseline: {value: 'top'}, fill: {value: '#fff'}, fontSize: {value: 12},
       text: {signal: "datum.size + ' lines' + (datum.score == null ? '' : ' · score ' + format(datum.score, '.1f'))"}, limit: {signal: 'datum.x1 - datum.x0 - 20'}}}}]
-}, {actions: false, tooltip: showTip});
+}, {actions: false, tooltip: showTip}).then(result => {
+  view = result.view;
+  drawPills();
+});
 </script>
 </body>
 </html>

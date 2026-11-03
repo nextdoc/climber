@@ -10,21 +10,37 @@ The scored map of the three sample classes. Hovering a group shows its classes, 
 
 ## Process
 
+Steps to map another repo, run from climber with `--root` pointing at that repo:
+
+1. **Gather.** Run `map gather`, `map check` and `map render`.
+   - Gather groups by class name only, with no agent.
+   - Tests and fixtures that several groups use land in `unassigned`.
+   - Generated code can dominate the chart.
+2. **Place unassigned classes.** An agent places each unassigned class in the group whose code it tests, and leaves any that are unclear in `unassigned`.
+   - Shared test utilities go in a `testing` group. It is infrastructure: scored on static analysis only and not climbed.
+   - A fixture that only one group's tests use goes in that group's `fixtures`.
+3. **Tag.** The user names facets, such as version or business area, and an agent infers each group's value from the code. See [Tagging](#tagging).
+   - The agent sets a value it can't infer to `unknown` rather than guessing.
+   - Each tag renders as a coloured pill. Clicking one fades the groups without that tag, and Clear at the top right resets the filter.
+4. **Score.** Once the user approves the map, run `map score <name> -o <org>`, then `map render <name> --scores`. See [Scoring in one pass](#scoring-in-one-pass).
+   - It runs the map's test classes, PMD and Graph Engine once against the code already in the org, then slices the outputs per group.
+   - Scoring again after regrouping reuses the run without calling the org. `--fresh` runs it again.
+
 ```mermaid
 flowchart TD
-  C[/"Apex classes selected by globs and ignores"/] --> G[map gather]
+  C[/"Apex classes selected by globs and ignores"/] --> G[1. map gather]
   G --> M[/"map.json: groups by name matching, and unassigned classes"/]
-  M --> A[Agent or user: merge groups by business area, place unassigned classes, add descriptions]
-  A --> K[map check]
+  M --> A[2. Agent or user: merge groups by business area, place unassigned classes, add descriptions]
+  A --> K[1. map check]
   H[Agent or user: write map.json by hand] --> K
   K --> M2[/"map.json"/]
-  M2 --> B[map render]
+  M2 --> B[1. map render]
   B --> T[/"before.html: sized by lines"/]
   T --> U{User reviews}
   U -->|edit groups| A
-  U -->|approve| S[map score]
+  U -->|approve| S[4. map score]
   S --> R[/"scores.json: a score per group"/]
-  R --> AF[map render --scores]
+  R --> AF[4. map render --scores]
   M2 --> AF
   AF --> TC[/"after.html: sized by lines, coloured by score"/]
   TC --> P[User chooses which groups to climb]
@@ -55,7 +71,7 @@ Each command takes the map's name, like the ascent CLIs, and works in the map's 
 - `map gather` selects `.cls` files with include globs, then drops any that match an `-i, --ignore` glob. Globs are relative to `--root`, which defaults to the current folder. For example, `map gather sales 'force-app/**/classes/*.cls' -i '**/*Mock*.cls'`. It groups them as [Default grouping](#default-grouping) describes. The map records the root and globs it was gathered from, so it can be gathered again the same way.
 - `map check` validates the map against the schema, which rejects a class in two groups and an approved map with unassigned classes, and checks that every class it names exists exactly once under the root. `map render` and `map score` run the same checks first.
 - `map render` never writes to the map file. Line counts are worked out on every render.
-- `map score` refuses a map that isn't approved. It scores the groups one at a time, largest first. It saves `scores.json` after each group and skips groups it already holds, so an interrupted pass resumes where it stopped.
+- `map score` refuses a map that isn't approved. It collects its inputs once for the whole map and slices them per group, as [Scoring in one pass](#scoring-in-one-pass) describes.
 - `map render --scores` warns when a group's classes or tests differ from the ones it was scored with.
 
 ### Quoting globs
@@ -89,6 +105,8 @@ Each map gets its own folder, `target/map/<name>/`:
 ```text
 target/map/<name>/
 ├── map.json         map gather
+├── run/             map score: the raw outputs of one test and analyzer run
+├── runs/<id>/       map score: each group's slice of run/
 ├── scores.json      map score
 ├── before.html      map render
 └── after.html       map render --scores
@@ -102,13 +120,46 @@ target/map/<name>/
 - D2: Each group has an `id`: a kebab-case slug set when the group is created, by `map gather` from the class name or by whoever adds the group. The schema requires ids to be unique. An id never changes, so renaming a group or moving classes between groups keeps its score attached.
 - D3: Red marks the lowest group score, not 0.
 - D4: Scoring is best effort. A dimension a group can't be scored on, such as limit headroom without a headroom test, gets weight 0 for that group, and the group's score records which dimensions it skipped.
-- D5: Scoring runs the tests already in the org and never deploys. It scores like deploy mode, except that the tests running stands in for the deploy's compile gate. Speed doesn't matter.
-- D6: One command, `map score`, scores every group in turn. It replaces the agent-driven loop of `map next` and `map set-score`.
+- D5: Scoring runs the tests already in the org and never deploys. It scores like deploy mode, except that the tests running stands in for the deploy's compile gate.
+- D6: One command, `map score`, scores every group. It replaces the agent-driven loop of `map next` and `map set-score`. Agents run it once and never loop it per group.
 - D7: The map file holds only what the agent and user decide: the groups. Line counts are derived on render, and scores live in `scores.json`.
+- D8: Tagging uses facets: one value per facet per group, so each facet is one way to categorise the groups and a group can't hold two values for it.
+
+### Scoring in one pass
+
+**Status: built.** These decisions replaced running `cli/score-prepare.sh` once per group, based on a full test run against a real org.
+
+- D9: `map score` collects its inputs once for the whole map and slices them per group. It calls `sf` from TypeScript with no script. `cli/score-prepare.sh` stays for ascents.
+- D10: The test run covers only the approved map's test classes, so a developer can map one area of a large org without running every test.
+- D11: The run uses `--code-coverage --detailed-coverage`. Its `coverage.records` give the covered lines per test method and class, so a group's coverage is the union of lines its own tests cover. Coverage from other groups' tests never counts.
+- D12: A group's tests passing and test run time come from its test classes' method results, including their setup methods.
+- D13: The org writes one debug log per test class. Logs are fetched by id with several in parallel, because `sf apex get log --number` stops at 25. Each log goes to the group that owns its test class.
+- D14: Limit parsing drops a namespace prefix from test names, so `ns.ClassTest.method` counts as `ClassTest.method` in a namespaced org.
+- D15: PMD and Graph Engine run once over all mapped classes. Every violation names its file, so the existing per-file filter splits them by group.
+- D16: The raw outputs stay in `target/map/<name>/run/`. Scoring again after regrouping slices them again without calling the org, and `--fresh` collects them again.
+- D17: `map score` creates the analyzer log folder that `code-analyzer.yml` names, `target/tmp/code-analyzer/logs`, under the target repo's root.
+
+Measured on an org with 308 tests in 41 test classes and 55 groups:
+
+| Step | Wall-clock |
+|---|---|
+| Tests with detailed coverage | 40 s |
+| 41 logs, fetched 8 at a time | 13 s |
+| PMD over 54 classes | 5 s, 81 s on a cold first run |
+| Graph Engine over 54 classes | 7 s |
+
+Scoring group by group would have taken 30 to 60 minutes, almost all of it per-run overhead. Two limits remain:
+
+- Graph Engine can fail on some entry points with an internal error. Those entry points report no violations, the same as in a per-group run.
+- Test classes run in parallel in one job, so run times can differ from a group's tests run alone.
 
 ## map.json
 
 The Zod schema `ProjectMap` in `cli/lib/map.ts` defines the file. `config/map.sample.json` maps the three sample classes. `headroomTest` is optional.
+
+### Tagging
+
+Tagging is optional. A group's `tags` holds one value per facet, such as `{ "version": "v3", "area": "rendering" }`, so each facet is one way to categorise the groups. The user names the facets and an agent infers their values from the code. The page gives each tag its own colour and shows it as a pill on each rectangle and in the hover. Clicking a pill fades every group without that tag. The filter shows at the top right, with Clear to reset it. While a filter is on, a checkbox below it hides those groups instead of fading them and lays the treemap out again with the remaining groups.
 
 ```json
 {

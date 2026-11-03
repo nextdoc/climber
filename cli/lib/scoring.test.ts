@@ -67,3 +67,11 @@ test("without a deploy, gates on tests that did not run and otherwise scores", (
   writeFileSync(join(RUN, "tests.json"), JSON.stringify({ result: { summary: { testsRan: 2, passing: 1, failing: 1, testExecutionTime: "0 ms" } } }));
   expect(scoreRun(opts)).toMatchObject({ gated: false, overall: 75 });
 });
+
+test("drops a namespace from test names in debug logs", () => {
+  rmSync(join(RUN, "logs"), { recursive: true });
+  mkdirSync(join(RUN, "logs"));
+  writeFileSync(join(RUN, "logs/test.log"), `|CODE_UNIT_STARTED|[EXTERNAL]|01p|ns.T.headroom()\n|TESTING_LIMITS\n|LIMIT_USAGE_FOR_NS|(default)|\n  Maximum CPU time: 2500 out of 10000\n\n`);
+  const weights = { PMD: 0, "Graph Engine": 0, "Tests passing": 0, "Code coverage": 0, "Test run time": 0, "Resource efficiency": 0 };
+  expect(scoreRun({ app: [], test: [], run: RUN, root: RUN, headroomTest: ["T.headroom"], skipDeploy: true, weights }).overall).toBe(75);
+});

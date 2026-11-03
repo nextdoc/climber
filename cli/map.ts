@@ -71,14 +71,15 @@ program
 
 program
   .command("score")
-  .description("Score each group with the tests already in the org, largest first, into scores.json; resumes where it stopped")
+  .description("Run the map's tests and analyzers once against the code already in the org, then score each group into scores.json")
   .argument("<name>", "the map's name")
   .requiredOption("-o, --org <org>", "target org alias or username")
   .option("--map <file>", "read the map from this file instead of the map's folder")
   .option("--root <dir>", "folder to find the class files under, instead of the map's source root")
-  .action((name: string, opts: { org: string; map?: string; root?: string }) => {
+  .option("--fresh", "run the tests and analyzers again, even when the map's run already covers it")
+  .action(async (name: string, opts: { org: string; map?: string; root?: string; fresh?: boolean }) => {
     const map = loadMap(mapFile(name, opts.map));
-    console.log(JSON.stringify(scoreMap(map, mapRoot(map, opts.root), opts.org, mapDir(name)), null, 2));
+    console.log(JSON.stringify(await scoreMap(map, mapRoot(map, opts.root), opts.org, mapDir(name), opts.fresh), null, 2));
   });
 
-program.parse();
+await program.parseAsync();

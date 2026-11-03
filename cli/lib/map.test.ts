@@ -34,6 +34,12 @@ describe("ProjectMap", () => {
     expect(ProjectMap.safeParse({ groups: [group("a")], unassigned: ["A"] }).success).toBe(false);
   });
 
+  test("takes optional tags with one value per kebab-case facet", () => {
+    expect(ProjectMap.parse({ groups: [{ ...group("a"), tags: { version: "v3" } }] }).groups[0].tags).toEqual({ version: "v3" });
+    expect(ProjectMap.safeParse({ groups: [{ ...group("a"), tags: { Version: "v3" } }] }).success).toBe(false);
+    expect(ProjectMap.safeParse({ groups: [{ ...group("a"), tags: { version: ["v2", "v3"] } }] }).success).toBe(false);
+  });
+
   test("rejects an approved map with unassigned classes", () => {
     expect(ProjectMap.safeParse({ approved: true, groups: [group("a")], unassigned: ["X"] }).success).toBe(false);
   });
@@ -151,7 +157,7 @@ test("changedSinceScored finds groups whose classes or tests differ from the sco
   expect(changedSinceScored(map, { a: score(["A"], ["F", "ATest"]), b: score(["B"], ["BTest", "Old"]) }).map((g) => g.id)).toEqual(["b"]);
 });
 
-test("scoreMap refuses a map that is not approved, before touching the org", () => {
+test("scoreMap refuses a map that is not approved, before touching the org", async () => {
   const dir = root({ "A.cls": "a", "ATest.cls": testClass() });
-  expect(() => scoreMap(ProjectMap.parse({ groups: [group("a")] }), dir, "org", join(dir, "map"))).toThrow("not approved");
+  await expect(scoreMap(ProjectMap.parse({ groups: [group("a")] }), dir, "org", join(dir, "map"))).rejects.toThrow("not approved");
 });
