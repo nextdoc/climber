@@ -1,6 +1,6 @@
 # Mapping
 
-**Maturity: early.** The [commands](#commands) below are built and tested against the three sample classes only.
+**Maturity: early.** The [commands](#commands) below are built and tested against the three sample classes, and have been tried on one real org with 55 groups.
 
 Mapping charts the landscape of an org's Apex codebase as a treemap. Each group of classes and tests is a rectangle sized by its lines of code and coloured by its score. A large red rectangle is a lot of code scoring poorly, which is where climbing is likely to pay off most.
 
@@ -10,51 +10,49 @@ The scored map of the three sample classes. Hovering a group shows its classes, 
 
 ## Process
 
-Steps to map another repo, run from climber with `--root` pointing at that repo:
+Steps to map a repo. To map another repo, run them from climber with `--root` pointing at that repo.
 
-1. **Gather.** Run `map gather`, `map check` and `map render`.
-   - Gather groups by class name only, with no agent.
+1. **Gather.** Create `map.json`, then run `map check` and `map render`.
+   - `map gather` selects the Apex files to map and groups them by class name only, with no agent, as a first pass for refining. See [Default grouping](#default-grouping).
    - Tests and fixtures that several groups use land in `unassigned`.
    - Generated code can dominate the chart.
-2. **Place unassigned classes.** An agent places each unassigned class in the group whose code it tests, and leaves any that are unclear in `unassigned`.
+   - Instead, an agent or the user can write `map.json` by hand, following the [schema](#mapjson). A map without `source` still works, but the unmapped classes table then only finds classes in folders that hold a mapped class.
+   - `map check` validates the map, however it was created.
+   - `map render` writes `before.html`, a treemap. Each rectangle is a group, its area is the non-blank lines in the group's classes and tests, and together the rectangles fill one outer rectangle that stands for the whole org.
+2. **Refine.** An agent or the user edits `map.json`: placing each unassigned class in the group whose code it tests, merging groups by business area and adding descriptions. Classes that are unclear stay in `unassigned`.
    - Shared test utilities go in a `testing` group. It is infrastructure: scored on static analysis only and not climbed.
    - A fixture that only one group's tests use goes in that group's `fixtures`.
 3. **Tag.** The user names facets, such as version or business area, and an agent infers each group's value from the code. See [Tagging](#tagging).
    - The agent sets a value it can't infer to `unknown` rather than guessing.
    - Each tag renders as a coloured pill. Clicking one fades the groups without that tag, and Clear at the top right resets the filter.
-4. **Score.** Once the user approves the map, run `map score <name> -o <org>`, then `map render <name> --scores`. See [Scoring in one pass](#scoring-in-one-pass).
-   - It runs the map's test classes, PMD and Graph Engine once against the code already in the org, then slices the outputs per group.
+4. **Approve.** The user reviews `before.html`, corrects the grouping and approves the map by setting `"approved": true` in `map.json`. An approved map has no unassigned classes.
+5. **Score.** Run `map score <name> -o <org>`, then `map render <name> --scores`. See [Scoring in one pass](#scoring-in-one-pass).
+   - Each group is scored with the same dimensions and weights as an ascent baseline.
+   - `map score` runs the map's test classes, PMD and Graph Engine once against the code already in the org, then slices the outputs per group.
    - Scoring again after regrouping reuses the run without calling the org. `--fresh` runs it again.
+   - `after.html` colours each rectangle by its group's overall score, from green at 100 to red at the lowest group score.
+6. **Choose.** The user uses the chart to pick the groups worth climbing.
 
 ```mermaid
 flowchart TD
   C[/"Apex classes selected by globs and ignores"/] --> G[1. map gather]
   G --> M[/"map.json: groups by name matching, and unassigned classes"/]
   M --> A[2. Agent or user: merge groups by business area, place unassigned classes, add descriptions]
-  A --> K[1. map check]
-  H[Agent or user: write map.json by hand] --> K
+  A --> TG[3. Agent: tag groups]
+  TG --> K[1. map check]
+  H[1. Agent or user: write map.json by hand] --> K
   K --> M2[/"map.json"/]
   M2 --> B[1. map render]
   B --> T[/"before.html: sized by lines"/]
-  T --> U{User reviews}
+  T --> U{4. User reviews}
   U -->|edit groups| A
-  U -->|approve| S[4. map score]
+  U -->|approve| S[5. map score]
   S --> R[/"scores.json: a score per group"/]
-  R --> AF[4. map render --scores]
+  R --> AF[5. map render --scores]
   M2 --> AF
   AF --> TC[/"after.html: sized by lines, coloured by score"/]
-  TC --> P[User chooses which groups to climb]
+  TC --> P[6. User chooses which groups to climb]
 ```
-
-1. **Create.** `map.json` can be created in either of two ways:
-   - `map gather` selects the Apex files to map and groups them by name, with no agent, as a first pass for refining. See [Default grouping](#default-grouping).
-   - An agent or the user writes `map.json` by hand, following the [schema](#mapjson). A map without `source` still works, but the unmapped classes table then only finds classes in folders that hold a mapped class.
-2. **Refine.** An agent or the user edits `map.json`: merging groups by business area, placing unassigned classes and adding descriptions. `map check` validates the map, however it was created.
-3. **Render.** `map render` counts the non-blank lines in each group's classes and tests and draws the groups as a treemap. Each rectangle is a group, its area is the group's lines of code, and together the rectangles fill one outer rectangle that stands for the whole org.
-4. **Approve.** The user corrects the grouping and approves the map by setting `"approved": true` in `map.json`. An approved map has no unassigned classes.
-5. **Score.** `map score` scores each group with the same dimensions and weights as an ascent baseline.
-6. **Colour.** `map render --scores` colours each rectangle by its group's overall score, from green at 100 to red at the lowest group score.
-7. **Choose.** The user uses the chart to pick the groups worth climbing.
 
 ## Commands
 
@@ -121,7 +119,7 @@ target/map/<name>/
 - D3: Red marks the lowest group score, not 0.
 - D4: Scoring is best effort. A dimension a group can't be scored on, such as limit headroom without a headroom test, gets weight 0 for that group, and the group's score records which dimensions it skipped.
 - D5: Scoring runs the tests already in the org and never deploys. It scores like deploy mode, except that the tests running stands in for the deploy's compile gate.
-- D6: One command, `map score`, scores every group. It replaces the agent-driven loop of `map next` and `map set-score`. Agents run it once and never loop it per group.
+- D6: One command, `map score`, scores every group. It replaces an earlier design in which an agent scored the groups one at a time. Agents run it once and never loop it per group.
 - D7: The map file holds only what the agent and user decide: the groups. Line counts are derived on render, and scores live in `scores.json`.
 - D8: Tagging uses facets: one value per facet per group, so each facet is one way to categorise the groups and a group can't hold two values for it.
 
@@ -230,7 +228,6 @@ Mapping makes no changes to code, metadata or business data. Its only side effec
 
 ## Open questions
 
-- Q2: Do rectangles nest, with groups split into classes and tests or into individual classes, or is each group one flat rectangle?
-- Q3: Should line counts also exclude comments? They exclude blank lines now.
-- Q4: A class used by several groups, such as a shared fixture or service: does it belong to one group, or is it counted in each?
-- Q5: Does mapping read the repo's source only, or also the org, for classes that aren't in the repo?
+- Q1: Do rectangles nest, with groups split into classes and tests or into individual classes, or is each group one flat rectangle?
+- Q2: Should line counts also exclude comments? They exclude blank lines now.
+- Q3: Does mapping read the repo's source only, or also the org, for classes that aren't in the repo?
