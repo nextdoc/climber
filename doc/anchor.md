@@ -16,7 +16,7 @@ Climbing exposes these weaknesses. A kept candidate that changes behaviour shows
 
 An anchor uses a scout ascent's drift to fix the tests, the code and the spec. It is optional. A user can start climbing without it, and any completed ascent can serve as the scout later. The inventory below was produced by hand this way, and an anchor automates it. The step names are defined in the [glossary](glossary.md#anchor).
 
-**Maturity: early.** Audit, verify and review are implemented and have been run end to end on one sample ascent. Apply and Track are not built yet. Audit findings vary from run to run, particularly defects, spec gaps and test gaps, and verify skips findings that depend on users, sharing or org metadata. The prompts, finding kinds and decision options will probably change as users give feedback.
+Audit, verify and review are built. Apply and Track are not, so you apply the decisions to the tests and spec yourself. Audit findings vary from run to run, particularly defects, spec gaps and test gaps, and verify skips findings that depend on users, sharing or org metadata.
 
 ```mermaid
 flowchart TD
@@ -46,14 +46,7 @@ flowchart TD
 - **Findings.** `findings.json` is validated with Zod, like the retro reply. Each finding has a code in one of the categories used below: B (behaviour change), D (defect against the spec), U (spec gap) and T (test gap). It also carries the evidence, the iterations involved, a proposed test with its seed data and expected result, and, after verify, a `verify` block added by the harness, with a status of reproduced, not reproduced, skipped or error and both outputs.
 - **Verify.** A baseline oracle with a challenger. For each behaviour change, an agent writes seed data aimed at it, such as an Event, a contact task or another closed status. Two Streamline rollbacks, one per version, run a renamed copy of the baseline class and the final class on the same seed data, each with its own governor limits, and compares ratings, created tasks and field writes. It runs once after the ascent, so it adds no time to the ascent. The harness writes a copy of the audit's findings to `anchor/findings.json`, with a `verify` block on each behaviour change. A finding that does not reproduce stays in the copy with the status not reproduced, so the user can see what the audit claimed.
 - **Review page.** A pre-built HTML template, like the ascent report, renders `findings.json` grouped by category, with evidence and verify status beside each finding.
-- **Decide.** The user decides per finding on the review page, from the options its kind allows: B preserve, fix, clarify or reject; D fix or reject; U clarify, with the answer in a note, or reject; T add-test or reject. The page keeps the decisions in browser storage for one review at a time, keyed by a hash of the findings, so new findings start blank. A button copies them as JSON to paste into the chat, and the agent writes `decisions.json`. A local server that writes the file directly is deferred.
-
-### Roadmap
-
-**Behaviour guard.** An ascent after an anchor guards behaviour on every candidate, not only through the tests. Behaviour changes on purpose only in an anchor, so the guard is chosen at `ascent-init` and fixed for the ascent, like the mode: a `behaviour` field in `ascent.config.json`, overridable with `--behaviour`.
-
-- **`strict`.** `iterate` gates each candidate with the baseline oracle, using the seed data verified in the last anchor. Any difference in output discards the candidate.
-- **`judged`.** A candidate that fails the oracle goes to a spec-judge agent step, which keeps it only when the difference improves adherence to the spec. The judge's reasoning is recorded in the history for review after the ascent. `ascent-init` refuses `judged` without a spec.
+- **Decide.** The user decides per finding on the review page, from the options its kind allows: B preserve, fix, clarify or reject; D fix or reject; U clarify, with the answer in a note, or reject; T add-test or reject. The page keeps the decisions in browser storage for one review at a time, keyed by a hash of the findings, so new findings start blank. A button copies them as JSON to paste into the chat, and the agent writes `decisions.json`.
 
 ## Sample inventories
 
@@ -97,15 +90,15 @@ The original `AccountHealthRollup` was written as a naive baseline (commit `a06a
 
 | Code | Missing scenario | Ascent drift it would have caught |
 |---|---|---|
-| T1 | A completed Event on the account | `LastActivityDate`, `ActivityHistories` (streamline-1, trial-3, trial-4, streamline-2 #18) |
-| T2 | A completed task on one of the account's contacts | `Task.AccountId`, `LastActivityDate` (streamline-2 #13, streamline-1, trial-4) |
+| T1 | A completed Event on the account | `LastActivityDate`, `ActivityHistories` |
+| T2 | A completed task on one of the account's contacts | `Task.AccountId`, `LastActivityDate` |
 | T3 | A task closed with a status other than 'Completed' | Same as T1, and D2 |
-| T4 | An open Event or an open task with a similar subject | `OpenActivities` and `LIKE 'Re-engage %'` dedup (trial-3, trial-4, deploy-probes-1) |
-| T5 | An opportunity in a custom closed stage | D1, and trial-4's `IsClosed = false` fix |
-| T6 | Rating boundaries: exactly 100,000 won, 250,000 pipeline, 30 and 90 days | None observed yet |
-| T7 | A run by a user without View All Data | `ActivityHistories`, `OpenActivities` restriction (trial-3, deploy-probes-1) |
-| T8 | More than 200 accounts, and more than 100 follow-ups | D3, and dropping the 200-record chunks (all ascents) |
-| T9 | An account whose Rating does not change | Skipping the update when Rating is unchanged (streamline-1) |
+| T4 | An open Event or an open task with a similar subject | `OpenActivities` and `LIKE 'Re-engage %'` dedup |
+| T5 | An opportunity in a custom closed stage | D1, and an `IsClosed = false` fix |
+| T6 | Rating boundaries: exactly 100,000 won, 250,000 pipeline, 30 and 90 days | None observed |
+| T7 | A run by a user without View All Data | `ActivityHistories`, `OpenActivities` restriction |
+| T8 | More than 200 accounts, and more than 100 follow-ups | D3, and dropping the 200-record chunks |
+| T9 | An account whose Rating does not change | Skipping the update when Rating is unchanged |
 
 ### Case SLA Escalation
 

@@ -233,7 +233,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. [CLIs](doc/c
 - [report](doc/clis.md#report) - rewrite the ascent's HTML report.
 - [confirm](doc/clis.md#confirm) - deploy and score the start and best kept commits, to confirm a streamline ascent before merging.
 - [retro](doc/clis.md#retro) - write a first-pass retrospective of an ascent.
-- [anchor](doc/clis.md#anchor) - audit an ascent's drift, verify behaviour changes against the baseline, and review the findings. Work in progress.
+- [anchor](doc/clis.md#anchor) - audit an ascent's drift, verify behaviour changes against the baseline, and review the findings. Applying the decisions is not built yet.
 - [map](doc/clis.md#map) - gather, check, render and score a treemap of the codebase's groups, to choose which to climb.
 - [score-prepare and score](doc/clis.md#score-prepare-and-score) - collect the raw tool output for a run, then score it.
 

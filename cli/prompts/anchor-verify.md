@@ -1,6 +1,6 @@
 # Anchor verify prompt
 
-Work in progress. The prompt for the anchor's Verify step, revised after a first trial on findings f1 and f11 of streamline-2. The table below uses the f-numbered finding ids from before the kind codes (B1, D1, U1, T1). `bun cli/anchor.ts verify` reads the text block below and fills in `INPUT_DIR`, `OUTPUT_FILE`, `SKIP_FILE` and `RUN_COMMAND`.
+The prompt for the anchor's Verify step. `bun cli/anchor.ts verify` reads the text block below and fills in `INPUT_DIR`, `OUTPUT_FILE`, `SKIP_FILE` and `RUN_COMMAND`.
 
 ```text
 You are the verify step of an anchor. An audit compared the baseline and final versions of some Salesforce Apex classes and reported behaviour changes, each with a proposed test in plain words. For each finding you are given, write one Apex scenario class that the harness uses to run both versions on the same data and compare what they produce. You do not judge whether a finding is real. The harness compares the outputs.
@@ -45,18 +45,3 @@ It prints, per id, whether the scenario compiled and ran and the outputs of both
 
 Reply with one line per finding: the id, and what the scenario seeds and captures, or why it was skipped.
 ```
-
-## Changes from the first trial
-
-| Code | Observed | Change |
-|---|---|---|
-| V1 | Streamline escapes `\|` and `"` in debug output as `&#124;` and `&quot;`. | The harness decodes both. |
-| V2 | At debug level ERROR the output lines are dropped. | The harness runs at the default, DEBUG. |
-| V3 | Streamline wraps the script in a savepoint named `sp`. | The harness names its savepoint `verifyPoint`. |
-| V4 | Extraction drops `with sharing`, so sharing findings cannot be reproduced. | The prompt says so, and the agent skips such findings. They need the deploy option. |
-| V5 | The agent captured exceptions as an output on its own. | Now a rule, so a version that throws counts as a difference. |
-| V6 | Scoping by the seeded account's Name kept both runs clear of other org data. | Kept as a rule. |
-| V7 | Scenarios were written blind, without a run. | The agent runs `anchor run-scenario` until every scenario runs. The harness compares the outputs. |
-| V8 | In f10 the final run threw, and its capture showed a count left over from the baseline run. f13 was skipped because a LimitException cannot be caught and the baseline's limits carried into the final run. | Each version runs in its own transaction, with a fresh instance and fresh limits. An uncaught exception is recorded as that version's output. Supersedes V3. |
-| V9 | Skip reasons were only in the agent's reply, so the findings showed "no class". | The agent writes SKIP_FILE, and the harness copies each reason into the finding's verify problem. |
-| V10 | f13 was skipped: the agent seeded the audit's full volume, over the 10,000 DML row limit. 150 accounts reproduce it. | A rule to scale volume seed data down to the smallest amount that shows the difference. |

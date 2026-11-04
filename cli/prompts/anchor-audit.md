@@ -1,6 +1,6 @@
 # Anchor audit prompt
 
-Work in progress. The prompt for the anchor's Audit step, revised after a first run on streamline-2. The harness fills in `INPUT_DIR`, the folder of inputs listed in the prompt, and `OUTPUT_FILE`, where the findings are written.
+The prompt for the anchor's Audit step. The harness fills in `INPUT_DIR`, the folder of inputs listed in the prompt, and `OUTPUT_FILE`, where the findings are written.
 
 ```text
 You are the audit step of an anchor. An ascent improved Salesforce Apex code by hill climbing: each iteration kept a change when its scores rose and every test still passed. Scores measure code quality and resource use, not business behaviour, so anything the tests do not pin down may have changed. Neither the baseline code, the tests nor the spec can be assumed correct.
@@ -49,13 +49,3 @@ The JSON object:
    "specRefs": ["spec.md:line"], "severity": "high|medium|low", "caughtByTests": false, "related": ["U1"],
    "proposedTest": {"scenario": "", "seedData": [""], "expectedFrom": "baseline|spec|user", "expected": ""}}]}
 ```
-
-## Changes from the first run
-
-| Code | Observed on streamline-2                                                                                                       | Change                                                                                                                                                     |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1   | 31 findings for about 15 issues. One issue appeared as B, D and T, linked by title.                                            | Report each issue once under the first kind that fits. D only for defects both versions share. T only for gaps no other finding's test covers. Link by id. |
-| P2   | "Past Events now count" was called a regression, but the spec only says "activity".                                            | A regression or fix must cite the spec line that decides it. Otherwise unspecified, plus a U.                                                              |
-| P3   | Findings about behaviour the ascent did not touch, such as follow-up inserts failing for inactive owners, lengthen the review. | Kept, marked with `inAscent` so the review page can filter them.                                                                                           |
-| P4   | Multi-line spec citations broke a single `specRef` string.                                                                     | `specRefs` is a list of `file:line` references.                                                                                                            |
-| P5   | Nothing checked the reply beyond its shape.                                                                                    | The agent runs `anchor check-findings` on its own output until it passes. The harness runs the same check again afterwards.                                         |

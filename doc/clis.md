@@ -55,7 +55,7 @@ The fixed shape makes ascents comparable, for example by the number and severity
 
 ## anchor
 
-`bun cli/anchor.ts <command>` groups the [anchor](anchor.md#anchor) tools. Work in progress.
+`bun cli/anchor.ts <command>` groups the [anchor](anchor.md#anchor) tools. Applying the review decisions is not built yet.
 
 `bun cli/anchor.ts audit <name> [-s <spec>]` writes the audit's inputs to `target/ascents/<name>/anchor/audit/input/`: the application classes at the baseline and final commits, the test classes and fixtures, the diff, the iterations and the spec. It then runs the audit agent step from [cli/prompts/anchor-audit.md](../cli/prompts/anchor-audit.md), which writes `anchor/audit/findings.json`, and checks the result as `check-findings` does. `--no-agent` rewrites the inputs and checks the existing findings.
 
