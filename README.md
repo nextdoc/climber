@@ -236,3 +236,7 @@ Each CLI is one file under `cli/`, run with Bun from the repo root. [CLIs](doc/c
 - [anchor](doc/clis.md#anchor) - audit an ascent's drift, verify behaviour changes against the baseline, and review the findings. Work in progress.
 - [map](doc/clis.md#map) - gather, check, render and score a treemap of the codebase's groups, to choose which to climb.
 - [score-prepare and score](doc/clis.md#score-prepare-and-score) - collect the raw tool output for a run, then score it.
+
+## Influences
+
+Climber was inspired by Andrej Karpathy's [autoresearch](https://github.com/karpathy/autoresearch), an agent loop that proposes a change, measures it and keeps it only if the metric improves.
