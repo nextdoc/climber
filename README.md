@@ -4,7 +4,7 @@ Climber is a set of tools an AI agent uses to improve your Salesforce Apex code 
 
 Each change gets a score that combines weighted tools (dimensions) such as tests, code coverage, static analysis and governor limit use, and you configure which tools count and how much.
 
-A change is kept only if the score goes up, so the code never gets worse. When the run ends you get a report of what changed and why.
+A change is kept only if the score goes up, so the code never gets worse. When the run ends you get a report of what changed and why. [How it works](doc/how-it-works.md) shows how ascents, iterations, steps and scoring fit together.
 
 To decide where to climb, [mapping](doc/mapping.md) charts your Apex code as a treemap of groups of classes and tests. Each rectangle is sized by lines of code and coloured by its score, so a large red rectangle is a lot of code scoring poorly.
 
