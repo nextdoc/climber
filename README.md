@@ -85,7 +85,7 @@ npm ci
 
 Climb the included sample classes and watch the report. Choose one of two configs:
 
-- **One class (simpler).** `config/ascent.account-health-rollup.json` climbs `AccountHealthRollup` alone. The ascent in the image used this setup and took 14 iterations, 0.8 hours and $11.26 in agent calls.
+- **One class (simpler).** `config/ascent.account-health-rollup.json` climbs `AccountHealthRollup` alone. The ascent in the image used this setup and took 14 iterations, 50 minutes and $11.26 in agent calls.
 - **Both classes.** `ascent.config.json`, the default, climbs `AccountHealthRollup` and `CaseSlaEscalation` together. Expect more time and agent cost per iteration.
 
 The steps below use the one-class config. For both classes, leave out `-c` and its file.
@@ -104,7 +104,7 @@ The steps below use the one-class config. For both classes, leave out `-c` and i
    open target/ascents/sample-1/report.html   # macOS. Use xdg-open on Linux or start on Windows.
    ```
 
-4. Run iterations until the summary reports `"stop": true`, and refresh the report after each one to watch the climb. To run them unattended, ask your agent to run the command repeatedly until it reports stop.
+4. Run iterations until the summary reports `"stop": true`. The report refreshes itself every minute, so you can watch the climb. To run them unattended, ask your agent to run the command repeatedly until it reports stop.
 
    ```sh
    bun cli/iterate.ts sample-1
