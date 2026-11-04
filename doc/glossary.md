@@ -28,7 +28,7 @@
 | Score | A dimension's value from 0 to 100. 100 is perfect. |
 | Penalty | The total a dimension's formula turns into a score, such as severity-weighted violations or seconds. |
 | Severity weight | The penalty points one violation costs, by severity. |
-| Half-score penalty | The penalty that scores exactly 50. Sets how strict a dimension is. |
+| Half-score penalty | The penalty that scores exactly 50. Sets how strict a dimension is. Overridden per dimension by `halfScores` in the ascent config. |
 | Limit headroom | How far one 200-record batch stays below its tightest governor limit. |
 | Headroom test | The test whose limit use scores limit headroom, one per climbed class. Named by `headroomTest` in the ascent config or the map. |
 | Resource efficiency | How few governor-limit resources the tests use for the same work. |

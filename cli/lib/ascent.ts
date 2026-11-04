@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 import { compose } from "./compose.ts";
 import { ExtractError } from "./extract.ts";
-import { DIMENSION_NAMES, scoreRun, weightOf, type ScoreOptions, type ScoreResult } from "./scoring.ts";
+import { DIMENSION_NAMES, HALF_SCORES, scoreRun, weightOf, type ScoreOptions, type ScoreResult } from "./scoring.ts";
 import { runVariants } from "./streamline.ts";
 
 export const REPO_ROOT = resolve(import.meta.dirname, "../..");
@@ -78,6 +78,8 @@ const AscentFields = z.strictObject({
   plateauDiscards: z.int().positive().default(3),
   margins: ByDimension,
   weights: z.partialRecord(Dimension, z.number().nonnegative()).default({}),
+  /** Overrides the default half-score penalty of the dimensions scored by one. Fixed per ascent, because scores from different values differ. */
+  halfScores: z.partialRecord(z.enum(Object.keys(HALF_SCORES) as [string, ...string[]]), z.number().positive()).default({}),
   /** Lets the plan step run anonymous Apex probes with Streamline. Fixed per ascent so ascents with and without it can be compared. */
   plannerStreamline: z.boolean().default(false),
   /** How runs collect their inputs. Fixed per ascent, because scores from the two modes differ. */
@@ -260,6 +262,7 @@ export function scoreOptions(config: AscentConfig, folder: string): ScoreOptions
     run: folder,
     root: config.worktree,
     weights: config.weights,
+    halfScores: config.halfScores,
     mode: config.mode,
     headroomTest: config.headroomTest,
     runCounts: Object.assign({}, ...(config.streamline ?? []).map((s) => s.runCounts))

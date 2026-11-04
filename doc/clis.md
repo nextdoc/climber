@@ -108,5 +108,6 @@ The fixed shape makes ascents comparable, for example by the number and severity
 | `--headroom-test <tests...>` | required | Tests whose limit use scores limit headroom, one per climbed class, such as `AccountHealthRollupTest.headroomAt200Accounts` |
 | `--root <dir>` | `.` | Folder the globs and analyzer paths are relative to |
 | `-w, --weights <json>` | every dimension 1 | Weight per dimension, where 0 disables it, such as `'{"Graph Engine": 0}'` |
+| `--half-scores <json>` | the defaults in [Scoring](scoring.md) | Half-score penalty `K` per dimension, such as `'{"PMD": 200}'` |
 | `-m, --mode <mode>` | `deploy` | `deploy` reads `deploy.json`, `tests.json` and the test logs. `streamline` reads `streamline.json` and the script logs |
 | `--run-counts <json>` | none | In Streamline mode, the test runs each measured scenario stands for in resource efficiency |

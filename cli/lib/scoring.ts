@@ -29,6 +29,7 @@ export type Mode = "deploy" | "streamline";
  * headroomTest: the tests whose limit use scores limit headroom, one per climbed class.
  * runCounts: how many test runs each Streamline measured scenario stands for in resource efficiency. A missing scenario counts once.
  * skipDeploy: in deploy mode, score code already in the org, with the tests having run standing in for the deploy's compile gate.
+ * halfScores: the half-score penalty per dimension, overriding HALF_SCORES.
  */
 export type ScoreOptions = {
   app: string[];
@@ -40,6 +41,7 @@ export type ScoreOptions = {
   mode?: Mode;
   runCounts?: Record<string, number>;
   skipDeploy?: boolean;
+  halfScores?: HalfScores;
 };
 
 export type DimensionScore = { name: string; weight: number; score: number; [detail: string]: unknown };
@@ -58,6 +60,16 @@ export const DETERMINISTIC: Record<string, boolean> = {
 };
 
 export const DIMENSION_NAMES = Object.keys(DETERMINISTIC);
+
+/** The penalty that scores 50, for each dimension scored by halfScore. */
+export const HALF_SCORES: Record<string, number> = {
+  PMD: 50,
+  "Graph Engine": 50,
+  "Test run time": 40,
+  "Resource efficiency": 170
+};
+
+export type HalfScores = Partial<Record<string, number>>;
 
 export const weightOf = (weights: Weights | undefined, name: string) => weights?.[name] ?? 1;
 
@@ -79,6 +91,8 @@ const round = (n: number) => Math.round(n * 10) / 10;
 const readJson = (file: string) => JSON.parse(readFileSync(file, "utf8"));
 
 const halfScore = (halfScorePenalty: number, penalty: number) => (100 * halfScorePenalty) / (halfScorePenalty + penalty);
+
+const halfScoreOf = (halfScores: HalfScores | undefined, name: string) => halfScores?.[name] ?? HALF_SCORES[name];
 
 function resolveFiles(patterns: string[], root: string): Set<string> {
   return new Set(patterns.flatMap((p) => globSync(p, { cwd: root })).map((f) => resolve(root, f)));
@@ -107,10 +121,10 @@ export function findings(opts: ScoreOptions): string[] {
   );
 }
 
-function scoreViolations(name: string, file: string, files: Set<string>, root: string): DimensionScore {
+function scoreViolations(name: string, file: string, files: Set<string>, root: string, k: number): DimensionScore {
   const counted = appViolations(file, files, root);
   const penalty = counted.reduce((sum, v) => sum + SEVERITY_WEIGHTS[v.severity], 0);
-  return { name, weight: 1, violations: counted.length, penalty, score: halfScore(50, penalty) };
+  return { name, weight: 1, violations: counted.length, penalty, score: halfScore(k, penalty) };
 }
 
 function scoreTestsPassing(summary: TestSummary): DimensionScore {
@@ -141,9 +155,9 @@ function scoreCoverage(coverage: ClassCoverage[], files: Set<string>): Dimension
   };
 }
 
-function scoreTestRunTime(summary: TestSummary): DimensionScore {
+function scoreTestRunTime(summary: TestSummary, k: number): DimensionScore {
   const seconds = parseInt(summary.testExecutionTime, 10) / 1000;
-  return { name: "Test run time", weight: 1, seconds, score: halfScore(40, seconds) };
+  return { name: "Test run time", weight: 1, seconds, score: halfScore(k, seconds) };
 }
 
 type LimitUsage = Record<string, { used: number; limit: number }>;
@@ -186,7 +200,7 @@ function scoreHeadroom(limits: Map<string, LimitUsage>, headroomTests: string[])
 }
 
 /** Totals limit use per test class, leaving out the headroom tests, and scores the mean of the per-class scores. */
-function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTests: string[], runCounts: Record<string, number> = {}): DimensionScore {
+function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTests: string[], k: number, runCounts: Record<string, number> = {}): DimensionScore {
   const totalsByClass = new Map<string, LimitUsage>();
   for (const [test, usage] of limits) {
     if (headroomTests.includes(test)) continue;
@@ -202,7 +216,7 @@ function scoreEfficiency(limits: Map<string, LimitUsage>, headroomTests: string[
     [...totalsByClass].map(([testClass, totals]) => {
       const percentOfLimit = Object.fromEntries(Object.entries(totals).map(([name, u]) => [name, percentOf(u)]));
       const penalty = round(Object.values(percentOfLimit).reduce((sum, p) => sum + p, 0));
-      return [testClass, { percentOfLimit, penalty, score: halfScore(170, penalty) }];
+      return [testClass, { percentOfLimit, penalty, score: halfScore(k, penalty) }];
     })
   );
   const scores = Object.values(classes).map((c) => c.score);
@@ -261,14 +275,15 @@ export function scoreRun(opts: ScoreOptions): ScoreResult {
   const files = appFiles(opts);
   const tests = () => readJson(join(opts.run, "tests.json")).result;
   const limits = () => (streamline ? streamlineLimits : testLimits)(readLogs(opts.run));
+  const k = (name: string) => halfScoreOf(opts.halfScores, name);
   const scorers: Record<string, () => DimensionScore> = {
-    PMD: () => scoreViolations("PMD", join(opts.run, "pmd.json"), files, opts.root),
-    "Graph Engine": () => scoreViolations("Graph Engine", join(opts.run, "sfge.json"), files, opts.root),
+    PMD: () => scoreViolations("PMD", join(opts.run, "pmd.json"), files, opts.root, k("PMD")),
+    "Graph Engine": () => scoreViolations("Graph Engine", join(opts.run, "sfge.json"), files, opts.root, k("Graph Engine")),
     "Tests passing": () => scoreTestsPassing(streamline ? streamlineTests(readLogs(opts.run), variants) : tests().summary),
     "Code coverage": streamline ? unavailable("Code coverage") : () => scoreCoverage(tests().coverage?.coverage ?? [], files),
-    "Test run time": streamline ? unavailable("Test run time") : () => scoreTestRunTime(tests().summary),
+    "Test run time": streamline ? unavailable("Test run time") : () => scoreTestRunTime(tests().summary, k("Test run time")),
     "Limit headroom": () => scoreHeadroom(limits(), opts.headroomTest),
-    "Resource efficiency": () => scoreEfficiency(limits(), opts.headroomTest, streamline ? opts.runCounts : undefined)
+    "Resource efficiency": () => scoreEfficiency(limits(), opts.headroomTest, k("Resource efficiency"), streamline ? opts.runCounts : undefined)
   };
   const dimensions = enabled.map((name) => ({ ...scorers[name](), weight: weightOf(opts.weights, name) }));
   const totalWeight = dimensions.reduce((sum, d) => sum + d.weight, 0);

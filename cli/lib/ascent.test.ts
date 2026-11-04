@@ -165,6 +165,13 @@ describe("AscentConfig", () => {
     expect(AscentConfig.safeParse({ ...config, mode: "streamline", streamline, weights: { "Test run time": 0 } }).success).toBe(false);
   });
 
+  test("accepts half-score penalties only for dimensions scored by one", () => {
+    expect(AscentConfig.parse(config).halfScores).toEqual({});
+    expect(AscentConfig.safeParse({ ...config, halfScores: { PMD: 100 } }).success).toBe(true);
+    expect(AscentConfig.safeParse({ ...config, halfScores: { "Code coverage": 100 } }).success).toBe(false);
+    expect(AscentConfig.safeParse({ ...config, halfScores: { PMD: 0 } }).success).toBe(false);
+  });
+
   test("reads one headroom test or streamline suite as a list of one", () => {
     const parsed = AscentConfig.parse({ ...config, mode: "streamline", streamline, weights: unavailableOff });
     expect(parsed.headroomTest).toEqual(["ATest.headroom"]);

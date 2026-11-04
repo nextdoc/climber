@@ -12,7 +12,7 @@ const log = (...lines: string[]) => lines.map((l, i) => `${i}\t12:00:00.0|USER_D
 
 const limits = (cpu: number) => JSON.stringify({ "Maximum CPU time": { used: cpu, limit: 10000 } });
 
-const score = (headroomTest = ["T.headroom"]) =>
+const score = (headroomTest = ["T.headroom"], halfScores?: Record<string, number>) =>
   scoreRun({
     app: [],
     test: [],
@@ -21,7 +21,8 @@ const score = (headroomTest = ["T.headroom"]) =>
     mode: "streamline",
     headroomTest,
     weights: { PMD: 0, "Graph Engine": 0, "Code coverage": 0, "Test run time": 0 },
-    runCounts: { "T.main": 3 }
+    runCounts: { "T.main": 3 },
+    halfScores
   });
 
 const variants = (...v: { variant?: string; compiled: boolean; success: boolean; compileProblem?: string }[]) => writeFileSync(join(RUN, "streamline.json"), JSON.stringify(v));
@@ -48,6 +49,13 @@ test("scores each climbed class on its own and averages them", () => {
   expect(dimensions["Limit headroom"].score).toBe(40);
   expect(dimensions["Resource efficiency"]).toMatchObject({ classes: { T: { penalty: 30 }, U: { penalty: 17 } } });
   expect(dimensions["Resource efficiency"].score).toBe(round((100 * 170) / 200 / 2 + (100 * 170) / 187 / 2));
+});
+
+test("scores resource efficiency with an overridden half-score penalty", () => {
+  variants({ compiled: true, success: true }, { compiled: true, success: true });
+  const efficiency = (halfScores?: Record<string, number>) => score(undefined, halfScores).dimensions!.find((d) => d.name === "Resource efficiency")!.score;
+  expect(efficiency()).toBe(round((100 * 170) / 200));
+  expect(efficiency({ "Resource efficiency": 30 })).toBe(50);
 });
 
 test("counts a variant with an uncaught exception as one failing test", () => {

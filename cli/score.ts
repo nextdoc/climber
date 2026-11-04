@@ -10,6 +10,7 @@ new Command()
   .option("-r, --run <dir>", "run folder", "target/tmp/score")
   .option("--root <dir>", "project folder the globs and analyzer paths are relative to", ".")
   .option("-w, --weights <json>", 'weight per dimension, 0 disables it, e.g. \'{"Graph Engine": 0}\'', JSON.parse, {})
+  .option("--half-scores <json>", 'half-score penalty per dimension, e.g. \'{"PMD": 100}\'', JSON.parse, {})
   .option("-m, --mode <mode>", "deploy reads deploy.json, tests.json and test logs; streamline reads streamline.json and script logs", "deploy")
   .option("--run-counts <json>", "in streamline mode, test runs each measured scenario stands for", JSON.parse, {})
   .action((opts: ScoreOptions) => {

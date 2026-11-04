@@ -3,7 +3,7 @@ import { join, posix, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { AscentDefaults, REPO_ROOT } from "./ascent.ts";
 import { collected, collectRun, sliceRun } from "./map-run.ts";
-import { DIMENSION_NAMES, scoreRun, type Weights } from "./scoring.ts";
+import { DIMENSION_NAMES, scoreRun, type HalfScores, type Weights } from "./scoring.ts";
 
 const TEMPLATE = join(REPO_ROOT, "cli/map.html");
 
@@ -261,11 +261,11 @@ export function groupWeights(group: Group, defaults: Weights): { weights: Weight
 }
 
 /** Scores a group from its slice of the map's run, like an ascent baseline, without deploying. */
-function scoreGroup(group: Group, root: string, folder: string, defaults: Weights, index: Map<string, string[]>): GroupScore {
+function scoreGroup(group: Group, root: string, folder: string, defaults: Weights, halfScores: HalfScores, index: Map<string, string[]>): GroupScore {
   const { weights, skipped } = groupWeights(group, defaults);
   const app = group.classes.map((n) => pathOf(index, n));
   const test = [...group.tests, ...group.fixtures].map((n) => pathOf(index, n));
-  const score = scoreRun({ app, test, run: folder, root, weights, skipDeploy: true, headroomTest: group.headroomTest ? [group.headroomTest] : [] });
+  const score = scoreRun({ app, test, run: folder, root, weights, halfScores, skipDeploy: true, headroomTest: group.headroomTest ? [group.headroomTest] : [] });
   return GroupScore.parse({
     overall: score.overall,
     dimensions: Object.fromEntries((score.dimensions ?? []).map((d) => [d.name, d.score])),
@@ -283,7 +283,7 @@ export async function scoreMap(map: ProjectMap, root: string, org: string, dir: 
   if (!map.approved) throw new Error('The map is not approved. Review before.html, then set "approved": true in the map file.');
   assertMap(map, root);
   const index = indexClasses(root);
-  const { weights } = AscentDefaults.parse(readJson(join(REPO_ROOT, "ascent.config.json")));
+  const { weights, halfScores } = AscentDefaults.parse(readJson(join(REPO_ROOT, "ascent.config.json")));
   const off = (...names: string[]) => names.every((n) => weights[n] === 0);
   const tests = map.groups.flatMap((g) => g.tests).sort();
   const skipTests = tests.length === 0 || off(...TEST_DIMENSIONS);
@@ -296,7 +296,7 @@ export async function scoreMap(map: ProjectMap, root: string, org: string, dir: 
   if (fresh || !collected(runDir, collection)) await collectRun(org, root, runDir, collection, log);
   else log(`Reusing ${runDir}`);
   sliceRun(runDir, root, map.groups.map((g) => ({ id: g.id, tests: g.tests, app: g.classes.map((n) => pathOf(index, n)) })), join(dir, "runs"));
-  const scores = MapScores.parse(Object.fromEntries(map.groups.map((g) => [g.id, scoreGroup(g, root, join(dir, "runs", g.id), weights, index)])));
+  const scores = MapScores.parse(Object.fromEntries(map.groups.map((g) => [g.id, scoreGroup(g, root, join(dir, "runs", g.id), weights, halfScores, index)])));
   writeJson(join(dir, "scores.json"), scores);
   return scores;
 }
