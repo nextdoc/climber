@@ -100,7 +100,7 @@ export function collected(out: string, wanted: Collection) {
   return covers(have.tests, wanted.tests) && covers(have.targets, wanted.targets) && (Object.keys(wanted.skip) as (keyof Skip)[]).every((k) => wanted.skip[k] || !have.skip[k]);
 }
 
-/** Runs the analyzers and the tests once against the org's code, into out, as doc/mapping.md "Scoring in one pass" describes. */
+/** Runs the analyzers and the tests once against the org's code, into out, as doc/mapping.md "Scoring" describes. */
 export async function collectRun(org: string, root: string, out: string, c: Collection, log = console.error) {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(join(out, "logs"), { recursive: true });

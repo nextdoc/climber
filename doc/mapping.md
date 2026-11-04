@@ -1,8 +1,6 @@
 # Mapping
 
-**Maturity: early.** The [commands](#commands) below are built and tested against the three sample classes, and have been tried on one real org with 55 groups.
-
-Mapping charts the landscape of an org's Apex codebase as a treemap. Each group of classes and tests is a rectangle sized by its lines of code and coloured by its score. A large red rectangle is a lot of code scoring poorly, which is where climbing is likely to pay off most.
+Mapping charts the landscape of an org's Apex codebase as a treemap. Each group of classes and tests is a rectangle sized by its lines of code and coloured by its score. A large red rectangle is a lot of code scoring poorly, which is where climbing is likely to pay off most. It has been tested on the three sample classes and on one real org with 55 groups.
 
 ![The scored map of the three sample classes, with the dimension scores of Account health in the hover](images/map.png)
 
@@ -18,7 +16,7 @@ Steps to map a repo. To map another repo, run them from climber with `--root` po
    - Generated code can dominate the chart.
    - Instead, an agent or the user can write `map.json` by hand, following the [schema](#mapjson). A map without `source` still works, but the unmapped classes table then only finds classes in folders that hold a mapped class.
    - `map check` validates the map, however it was created.
-   - `map render` writes `before.html`, a treemap. Each rectangle is a group, its area is the non-blank lines in the group's classes and tests, and together the rectangles fill one outer rectangle that stands for the whole org.
+   - `map render` writes `before.html`, a treemap. Each rectangle is a group, its area is the non-blank lines, comments included, in the group's classes and tests, and together the rectangles fill one outer rectangle that stands for the whole org.
 2. **Refine.** An agent or the user edits `map.json`: placing each unassigned class in the group whose code it tests, merging groups by business area and adding descriptions. Classes that are unclear stay in `unassigned`.
    - Shared test utilities go in a `testing` group. It is infrastructure: scored on static analysis only and not climbed.
    - A fixture that only one group's tests use goes in that group's `fixtures`.
@@ -26,7 +24,7 @@ Steps to map a repo. To map another repo, run them from climber with `--root` po
    - The agent sets a value it can't infer to `unknown` rather than guessing.
    - Each tag renders as a coloured pill. Clicking one fades the groups without that tag, and Clear at the top right resets the filter.
 4. **Approve.** The user reviews `before.html`, corrects the grouping and approves the map by setting `"approved": true` in `map.json`. An approved map has no unassigned classes.
-5. **Score.** Run `map score <name> -o <org>`, then `map render <name> --scores`. See [Scoring in one pass](#scoring-in-one-pass).
+5. **Score.** Run `map score <name> -o <org>`, then `map render <name> --scores`. See [Scoring](#scoring).
    - Each group is scored with the same dimensions and weights as an ascent baseline.
    - `map score` runs the map's test classes, PMD and Graph Engine once against the code already in the org, then slices the outputs per group.
    - Scoring again after regrouping reuses the run without calling the org. `--fresh` runs it again.
@@ -69,7 +67,7 @@ Each command takes the map's name, like the ascent CLIs, and works in the map's 
 - `map gather` selects `.cls` files with include globs, then drops any that match an `-i, --ignore` glob. Globs are relative to `--root`, which defaults to the current folder. For example, `map gather sales 'force-app/**/classes/*.cls' -i '**/*Mock*.cls'`. It groups them as [Default grouping](#default-grouping) describes. The map records the root and globs it was gathered from, so it can be gathered again the same way.
 - `map check` validates the map against the schema, which rejects a class in two groups and an approved map with unassigned classes, and checks that every class it names exists exactly once under the root. `map render` and `map score` run the same checks first.
 - `map render` never writes to the map file. Line counts are worked out on every render.
-- `map score` refuses a map that isn't approved. It collects its inputs once for the whole map and slices them per group, as [Scoring in one pass](#scoring-in-one-pass) describes.
+- `map score` refuses a map that isn't approved. It collects its inputs once for the whole map and slices them per group, as [Scoring](#scoring) describes.
 - `map render --scores` warns when a group's classes or tests differ from the ones it was scored with.
 
 ### Quoting globs
@@ -112,30 +110,17 @@ target/map/<name>/
 
 `--map <file>` on `render` and `score` reads a map from elsewhere, such as the committed `config/map.sample.json`, while the outputs still go to the named folder.
 
-## Decisions
+## Scoring
 
-- D1: Zod schemas define the map and the scores files, and every mapping tool reads and writes them through those schemas.
-- D2: Each group has an `id`: a kebab-case slug set when the group is created, by `map gather` from the class name or by whoever adds the group. The schema requires ids to be unique. An id never changes, so renaming a group or moving classes between groups keeps its score attached.
-- D3: Red marks the lowest group score, not 0.
-- D4: Scoring is best effort. A dimension a group can't be scored on, such as limit headroom without a headroom test, gets weight 0 for that group, and the group's score records which dimensions it skipped.
-- D5: Scoring runs the tests already in the org and never deploys. It scores like deploy mode, except that the tests running stands in for the deploy's compile gate.
-- D6: One command, `map score`, scores every group. It replaces an earlier design in which an agent scored the groups one at a time. Agents run it once and never loop it per group.
-- D7: The map file holds only what the agent and user decide: the groups. Line counts are derived on render, and scores live in `scores.json`.
-- D8: Tagging uses facets: one value per facet per group, so each facet is one way to categorise the groups and a group can't hold two values for it.
+`map score` scores every group in one command, so an agent runs it once rather than once per group. It runs the tests already in the org and never deploys. It scores like a deploy-mode ascent, except that the tests running stands in for the deploy's compile gate.
 
-### Scoring in one pass
-
-**Status: built.** These decisions replaced running `cli/score-prepare.sh` once per group, based on a full test run against a real org.
-
-- D9: `map score` collects its inputs once for the whole map and slices them per group. It calls `sf` from TypeScript with no script. `cli/score-prepare.sh` stays for ascents.
-- D10: The test run covers only the approved map's test classes, so a developer can map one area of a large org without running every test.
-- D11: The run uses `--code-coverage --detailed-coverage`. Its `coverage.records` give the covered lines per test method and class, so a group's coverage is the union of lines its own tests cover. Coverage from other groups' tests never counts.
-- D12: A group's tests passing and test run time come from its test classes' method results, including their setup methods.
-- D13: The org writes one debug log per test class. Logs are fetched by id with several in parallel, because `sf apex get log --number` stops at 25. Each log goes to the group that owns its test class.
-- D14: Limit parsing drops a namespace prefix from test names, so `ns.ClassTest.method` counts as `ClassTest.method` in a namespaced org.
-- D15: PMD and Graph Engine run once over all mapped classes. Every violation names its file, so the existing per-file filter splits them by group.
-- D16: The raw outputs stay in `target/map/<name>/run/`. Scoring again after regrouping slices them again without calling the org, and `--fresh` collects them again.
-- D17: `map score` creates the analyzer log folder that `code-analyzer.yml` names, `target/tmp/code-analyzer/logs`, under the target repo's root.
+- **One run, sliced per group.** The test run covers only the approved map's test classes, so you can map one area of a large org without running every test. PMD and Graph Engine run once over all mapped classes, and each violation goes to the group that holds its file.
+- **Coverage.** The run uses `--code-coverage --detailed-coverage`, so a group's coverage is the union of the lines its own tests cover. Coverage from other groups' tests never counts.
+- **Tests passing and run time** come from the group's test classes' method results, including their setup methods.
+- **Limits.** The org writes one debug log per test class, and each log goes to the group that owns its test class. Logs are fetched by id, several at a time, because `sf apex get log --number` stops at 25. Test names drop any namespace prefix, so `ns.ClassTest.method` counts as `ClassTest.method` in a namespaced org.
+- **Best effort.** A dimension a group can't be scored on, such as limit headroom without a headroom test, or every test dimension for a group without tests, gets weight 0 for that group. Its entry in `scores.json` lists the skipped dimensions.
+- **Reuse.** The raw outputs stay in `target/map/<name>/run/`. Scoring again after regrouping slices them again without calling the org, and `--fresh` collects them again.
+- `map score` creates the analyzer log folder that `code-analyzer.yml` names, `target/tmp/code-analyzer/logs`, under the target repo's root.
 
 Measured on an org with 308 tests in 41 test classes and 55 groups:
 
@@ -146,14 +131,18 @@ Measured on an org with 308 tests in 41 test classes and 55 groups:
 | PMD over 54 classes | 5 s, 81 s on a cold first run |
 | Graph Engine over 54 classes | 7 s |
 
-Scoring group by group would have taken 30 to 60 minutes, almost all of it per-run overhead. Two limits remain:
+Two limits apply:
 
 - Graph Engine can fail on some entry points with an internal error. Those entry points report no violations, the same as in a per-group run.
 - Test classes run in parallel in one job, so run times can differ from a group's tests run alone.
 
 ## map.json
 
-The Zod schema `ProjectMap` in `cli/lib/map.ts` defines the file. `config/map.sample.json` maps the three sample classes. `headroomTest` is optional.
+The Zod schema `ProjectMap` in `cli/lib/map.ts` defines the file, and every map command reads and writes it through that schema. `config/map.sample.json` maps the three sample classes. `headroomTest` is optional.
+
+The file holds only what the agent and user decide: the groups. Line counts are worked out on each render, and scores live in `scores.json`.
+
+Each group has an `id`, a kebab-case slug set when the group is created, by `map gather` from the class name or by whoever adds the group. Ids are unique and never change, so renaming a group or moving classes between groups keeps its score attached.
 
 ### Tagging
 
@@ -198,7 +187,9 @@ A `MapScores` schema defines the file, keyed by group id. Each entry records the
 
 ## Treemap
 
-Vega has a treemap transform. Vega-Lite does not, so the chart is a Vega spec. The report page already loads Vega 5.30.0. Before scoring, rectangles share one neutral colour.
+Each group is one flat rectangle. Its classes and tests are listed in the hover, not drawn as nested rectangles. Before scoring, rectangles share one neutral colour.
+
+The chart is a Vega spec, since Vega has a treemap transform and Vega-Lite does not. It uses Vega 5.30.0, the version the ascent report loads.
 
 ## Unmapped classes
 
@@ -219,15 +210,11 @@ The page header shows mapped and unmapped line totals. When every class is mappe
 
 ## Assumptions and side effects
 
+Mapping reads the class files in the repo only. Classes that exist in the org but not in the repo don't appear on the map.
+
 Mapping assumes the source it reads has been deployed to the org it scores. Deploying is the user's job, not mapping's. If the source and the org differ, PMD and Graph Engine score the local files while the tests run the org's code, and a group's score mixes the two.
 
 Mapping makes no changes to code, metadata or business data. Its only side effects come from running tests:
 
 - Apex tests roll back their data. The org keeps the test results and updates its stored code coverage.
 - Reading limit use needs debug logs, so scoring creates or updates a `DebugLevel` and a `TraceFlag` for the running user. The org keeps the resulting `ApexLog` records.
-
-## Open questions
-
-- Q1: Do rectangles nest, with groups split into classes and tests or into individual classes, or is each group one flat rectangle?
-- Q2: Should line counts also exclude comments? They exclude blank lines now.
-- Q3: Does mapping read the repo's source only, or also the org, for classes that aren't in the repo?
