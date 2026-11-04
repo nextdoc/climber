@@ -11,7 +11,7 @@ Each is fixed when the ascent starts. Either can be on without the other, so asc
 
 ## Org safety
 
-Streamline runs agent-written code as normal anonymous Apex, outside the isolation of Apex tests. Rollback undoes DML, but callouts, platform events published immediately and spent governor limits are not rolled back. So:
+Streamline runs agent-written code as normal anonymous Apex, outside the isolation of Apex tests. Rollback undoes DML, but callouts, platform events published immediately and spent governor limits are not rolled back. Whether email it sends and async jobs it queues (future, queueable, batch) are rolled back has not been tested. So:
 
 - `ascent-init` refuses planner probes and Streamline mode unless the target org is a scratch org listed by `sf org list`.
 - In Streamline mode the harness calls Streamline itself and only ever passes the ascent's target org.
