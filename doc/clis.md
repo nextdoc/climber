@@ -92,7 +92,7 @@ The fixed shape makes ascents comparable, for example by the number and severity
 
 ## score-prepare and score
 
-`cli/score-prepare.sh <org> <run folder> <test classes>` deploys `force-app`, runs PMD, Graph Engine and the tests, and saves the raw output and debug logs to the run folder. `bun cli/score.ts` scores that folder as defined in `doc/scoring.md`. `npm run score:prepare` and `npm run score` run them on this repo.
+`cli/score-prepare.sh <org> <run folder> <test classes>` deploys the package directories in `sfdx-project.json`, runs PMD, Graph Engine and the tests, and saves the raw output and debug logs to the run folder. `bun cli/score.ts` scores that folder as defined in `doc/scoring.md`. `npm run score:prepare` and `npm run score` run them on this repo.
 
 | Argument (score-prepare) | Description |
 |---|---|

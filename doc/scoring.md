@@ -126,7 +126,7 @@ Baseline overall: 49.8.
 
 `npm run score:prepare` runs `cli/score-prepare.sh`, which writes a run folder at `target/tmp/score/`:
 
-1. `deploy.json`: deploys `force-app` to the org. A failed deploy is the compile gate, and collection stops.
+1. `deploy.json`: deploys the package directories in `sfdx-project.json` to the org. A failed deploy is the compile gate, and collection stops.
 2. `pmd.json` and `sfge.json`: Code Analyzer results.
 3. `tests.json`: the Apex test results.
 4. `logs/`: the test run's debug log, captured with the `ClimbScore` debug level and a one-hour trace flag that the script creates or renews.

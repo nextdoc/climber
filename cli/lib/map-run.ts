@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
-import { REPO_ROOT, run } from "./ascent.ts";
+import { packageDirs, REPO_ROOT, run } from "./ascent.ts";
 
 const DEBUG_LEVEL = "ClimbScore";
 
@@ -112,7 +112,7 @@ export async function collectRun(org: string, root: string, out: string, c: Coll
   }
   if (!c.skip.sfge) {
     log(`Running Graph Engine over ${c.targets.length} classes`);
-    analyse("sfge", ["--workspace", "force-app", ...targets], root, out);
+    analyse("sfge", [...packageDirs(root).flatMap((d) => ["--workspace", d]), ...targets], root, out);
   }
   if (!c.skip.tests) {
     const start = new Date().toISOString();

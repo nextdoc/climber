@@ -21,10 +21,18 @@ tooling_query() {
   sf data query -o "$ORG" --use-tooling-api --json -q "$1" | json 'd.result?.records?.map((r) => r.Id) ?? []'
 }
 
+# The package directories in sfdx-project.json hold the source to deploy and analyse.
+PACKAGE_DIRS=()
+while IFS= read -r d; do PACKAGE_DIRS+=("$d"); done < <(json 'd.packageDirectories?.map((p) => p.path)' < sfdx-project.json)
+[ ${#PACKAGE_DIRS[@]} -gt 0 ] || { echo "No packageDirectories in sfdx-project.json" >&2; exit 1; }
+SOURCE_DIRS=()
+WORKSPACES=()
+for d in "${PACKAGE_DIRS[@]}"; do SOURCE_DIRS+=(--source-dir "$d"); WORKSPACES+=(--workspace "$d"); done
+
 # Compile gate: a failed deploy stops collection, and the scorer reports the gate from deploy.json.
 # Each worktree has its own source tracking, so org changes from other worktrees show as conflicts.
 if [ "${SKIP_DEPLOY:-}" != 1 ]; then
-  sf project deploy start -o "$ORG" --source-dir force-app --ignore-conflicts --json > "$OUT/deploy.json"
+  sf project deploy start -o "$ORG" "${SOURCE_DIRS[@]}" --ignore-conflicts --json > "$OUT/deploy.json"
   SUCCESS=$(json 'd.result?.success' < "$OUT/deploy.json") || { json 'd.message' < "$OUT/deploy.json" >&2; exit 1; }
   [ "$SUCCESS" = "true" ] || exit 0
 fi
@@ -32,12 +40,12 @@ fi
 # ANALYZER_TARGETS, comma-separated files, scopes the analysis to the climbed classes. ANALYZER_CONFIG keeps the rules
 # the same whichever repo the worktree comes from.
 TARGETS=()
-IFS=, read -ra FILES <<< "${ANALYZER_TARGETS:-force-app}"
+IFS=, read -ra FILES <<< "${ANALYZER_TARGETS:-$(IFS=,; echo "${PACKAGE_DIRS[*]}")}"
 for f in "${FILES[@]}"; do TARGETS+=(--target "$f"); done
 CONFIG=()
 [ -n "${ANALYZER_CONFIG:-}" ] && CONFIG=(--config-file "$ANALYZER_CONFIG")
 [ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector pmd "${TARGETS[@]}" --output-file "$OUT/pmd.json" || exit 1
-[ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector sfge --workspace force-app "${TARGETS[@]}" --output-file "$OUT/sfge.json" || exit 1
+[ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector sfge "${WORKSPACES[@]}" "${TARGETS[@]}" --output-file "$OUT/sfge.json" || exit 1
 [ "${SKIP_TESTS:-}" = 1 ] && exit 0
 
 # Logs only profiling, which holds the TESTING_LIMITS blocks the scorer reads.

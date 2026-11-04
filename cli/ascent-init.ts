@@ -11,6 +11,7 @@ import {
   formatApp,
   git,
   MCP_CONFIG,
+  packageDirs,
   REPO_ROOT,
   runDir,
   saveConfig,
@@ -62,7 +63,7 @@ new Command()
       createdAt: new Date().toISOString(),
       baseCommit
     });
-    const files = git(repo, "ls-tree", "-r", "--name-only", baseCommit, "--", "force-app").split("\n");
+    const files = git(repo, "ls-tree", "-r", "--name-only", baseCommit, "--", ...packageDirs(repo)).split("\n");
     const missing = [...config.testClasses.sample, ...config.testClasses.holdout].filter(
       (c) => !files.some((f) => f.endsWith(`/classes/${c}.cls`))
     );

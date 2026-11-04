@@ -174,9 +174,19 @@ export function appendHistory(name: string, entry: HistoryEntry) {
   appendFileSync(join(ascentDir(name), "history.jsonl"), JSON.stringify(HistoryEntry.parse(entry)) + "\n");
 }
 
+const SfdxProject = z.object({ packageDirectories: z.array(z.object({ path: z.string() })).min(1) });
+
+/** The repo's package directories, from its sfdx-project.json. */
+export function packageDirs(root: string): string[] {
+  const file = join(root, "sfdx-project.json");
+  if (!existsSync(file)) throw new Error(`No sfdx-project.json in ${root}`);
+  return SfdxProject.parse(JSON.parse(readFileSync(file, "utf8"))).packageDirectories.map((d) => d.path.replace(/\\/g, "/").replace(/\/$/, ""));
+}
+
 /** Source files of the given Apex classes, with their meta files. */
 export function classFiles(worktree: string, classes: string[]): string[] {
-  return classes.flatMap((c) => globSync(`force-app/**/classes/${c}.cls`, { cwd: worktree }).flatMap((f) => [f, `${f}-meta.xml`]));
+  const dirs = packageDirs(worktree);
+  return classes.flatMap((c) => globSync(dirs.map((d) => `${d}/**/classes/${c}.cls`), { cwd: worktree }).flatMap((f) => [f, `${f}-meta.xml`]));
 }
 
 export function run(command: string, args: string[], cwd: string, input?: string, env?: Record<string, string>) {

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { AscentConfig, atSummit, consecutiveDiscards, decide, HistoryEntry, plateauDiscards } from "./ascent.ts";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { AscentConfig, atSummit, classFiles, consecutiveDiscards, decide, HistoryEntry, packageDirs, plateauDiscards, REPO_ROOT } from "./ascent.ts";
 import { DIMENSION_NAMES, type ScoreResult } from "./scoring.ts";
 
 const baseline = Object.fromEntries(DIMENSION_NAMES.map((d) => [d, 50]));
@@ -192,4 +194,41 @@ test("the committed ascent.config.json is valid", async () => {
   const { AscentDefaults, REPO_ROOT } = await import("./ascent.ts");
   const file = await Bun.file(`${REPO_ROOT}/ascent.config.json`).json();
   expect(AscentDefaults.safeParse(file).success).toBe(true);
+});
+
+describe("packageDirs", () => {
+  const dir = join(REPO_ROOT, "target/tmp/package-dirs-test");
+
+  const project = (packageDirectories: { path: string }[]) => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "sfdx-project.json"), JSON.stringify({ packageDirectories }));
+  };
+
+  test("reads every package directory, normalising separators and trailing slashes", () => {
+    project([{ path: "force-app" }, { path: "libs\\core/" }]);
+    expect(packageDirs(dir)).toEqual(["force-app", "libs/core"]);
+  });
+
+  test("finds class files in any package directory", () => {
+    project([{ path: "app" }, { path: "libs/core" }]);
+    for (const f of ["app/main/default/classes/Foo.cls", "libs/core/classes/Bar.cls", "elsewhere/classes/Baz.cls"]) {
+      mkdirSync(join(dir, f, ".."), { recursive: true });
+      writeFileSync(join(dir, f), "");
+    }
+    expect(classFiles(dir, ["Foo", "Bar", "Baz"])).toEqual([
+      "app/main/default/classes/Foo.cls",
+      "app/main/default/classes/Foo.cls-meta.xml",
+      "libs/core/classes/Bar.cls",
+      "libs/core/classes/Bar.cls-meta.xml"
+    ]);
+  });
+
+  test("rejects a repo without sfdx-project.json or package directories", () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    expect(() => packageDirs(dir)).toThrow("No sfdx-project.json");
+    project([]);
+    expect(() => packageDirs(dir)).toThrow();
+  });
 });

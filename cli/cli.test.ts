@@ -100,7 +100,7 @@ beforeAll(() => {
   writeFileSync(join(FAKE, "tests.json"), JSON.stringify(TESTS));
   writeFileSync(join(FAKE, "test.log"), testLog("ns.AccountHealthRollupTest.headroomAt200Accounts") + testLog("ns.AccountHealthRollupTest.other"));
 
-  for (const path of ["cli", "force-app", ".prettierrc", ".prettierignore", ".gitignore"]) {
+  for (const path of ["cli", "force-app", "sfdx-project.json", ".prettierrc", ".prettierignore", ".gitignore"]) {
     cpSync(join(REPO_ROOT, path), join(REPO, path), { recursive: true });
   }
   symlinkSync(join(REPO_ROOT, "node_modules"), join(REPO, "node_modules"));
