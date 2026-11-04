@@ -20,7 +20,7 @@ The out-of-the-box dimensions:
 
 To try it, follow the [quick start](#quick-start) to climb the included sample classes in a scratch org.
 
-[![The report of a deploy-mode ascent of the AccountHealthRollup sample class](doc/images/report.png)](https://nextdoc.github.io/climb-your-apex/account-health-deploy.html)
+[![The report of a deploy-mode ascent of the AccountHealthRollup sample class](doc/images/report.png)](https://nextdoc.github.io/climber/account-health-deploy.html)
 
 The report of a deploy-mode ascent of the `AccountHealthRollup` sample class. Click the image for the full report.
 

@@ -6,7 +6,7 @@ Each way of using climber, from reading the sample report to an ascent in a sand
 
 | Level | What you run | Org | Changes in the org | Changes in your repo | Undo |
 |---|---|---|---|---|---|
-| L0 | Read the docs and the [sample report](https://nextdoc.github.io/climb-your-apex/account-health-deploy.html) | none | None | None | Nothing to undo |
+| L0 | Read the docs and the [sample report](https://nextdoc.github.io/climber/account-health-deploy.html) | none | None | None | Nothing to undo |
 | L1 | Quick start, mapping: [map](mapping.md) the sample classes with `config/map.sample.json`, then `map score` | new scratch org for the samples | Needs the unchanged sample classes deployed once. `map score` runs their tests and adds a debug level, a trace flag and debug logs. Never deploys a change | None. The map is in climber's `target/map/` | Delete the scratch org |
 | L2 | [Quick start](../README.md#quick-start), ascent: an ascent on the sample classes, deploy mode | new scratch org for the samples | Deploys the sample classes, then each iteration's candidate code. Runs the sample tests. Adds a debug level, a trace flag and debug logs | None. The ascent's branch and worktree are in climber's repo | Delete the scratch org |
 | L3 | An ascent on the sample classes, Streamline mode | new scratch org for the samples | Nothing deployed. Candidate code runs as anonymous Apex and its DML is rolled back. `confirm` deploys at the end | None | Delete the scratch org |
