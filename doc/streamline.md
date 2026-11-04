@@ -1,7 +1,5 @@
 # Streamline
 
-Status: draft. This records what has been proven so far. Sections marked open are undecided.
-
 Streamline is an MCP server that runs anonymous Apex in an org and rolls the org back afterwards. An ascent can use it in two independent ways:
 
 | Use | What it does | Decides keep or discard | Setting |
@@ -38,7 +36,7 @@ Risks:
 
 Streamline mode runs each iteration's code as anonymous Apex in place of the deploy and Apex test run of deploy mode. Nothing is deployed. See [glossary](glossary.md).
 
-It suits a fast early pass that makes the bulk of the gains cheaply. A later ascent in deploy mode then measures every dimension, including coverage and test run time, and confirms the code in the org before merging.
+It suits a fast early pass that makes the bulk of the gains cheaply. `confirm` then deploys and tests the best kept commit before merging, and a later deploy-mode ascent can measure coverage and test run time.
 
 ### Benefits and trade-offs
 
@@ -170,8 +168,3 @@ CPU time is about 30% lower in Streamline. Scores within one ascent stay compara
 - Limits are per transaction and rollback does not refund them: 10,000 DML rows and 10 s CPU per variant.
 - Each composed script must stay within the anonymous Apex size limit, which caps how many classes one ascent can cover.
 - The org never receives the kept code, so an ascent needs one deploy and full test run before merging: `bun cli/confirm.ts <name>`.
-
-### Open
-
-- Half-score values per mode.
-- Whether scenarios are written by hand or generated from the test classes.
