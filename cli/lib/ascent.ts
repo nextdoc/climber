@@ -186,6 +186,11 @@ export function packageDirs(root: string): string[] {
 }
 
 /** Source files of the given Apex classes, with their meta files. */
+/** Lines of `git status --porcelain` output whose path is not in `ignore`. */
+export function changedFiles(porcelain: string, ignore: string[]): string[] {
+  return porcelain.split("\n").filter((line) => line !== "" && !ignore.includes(line.trim().replace(/^\S+\s+/, "")));
+}
+
 export function classFiles(worktree: string, classes: string[]): string[] {
   const dirs = packageDirs(worktree);
   return classes.flatMap((c) => globSync(dirs.map((d) => `${d}/**/classes/${c}.cls`), { cwd: worktree }).flatMap((f) => [f, `${f}-meta.xml`]));

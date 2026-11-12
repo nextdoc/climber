@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AscentConfig, atSummit, classFiles, consecutiveDiscards, decide, HistoryEntry, packageDirs, plateauDiscards, REPO_ROOT } from "./ascent.ts";
+import { AscentConfig, atSummit, changedFiles, classFiles, consecutiveDiscards, decide, HistoryEntry, packageDirs, plateauDiscards, REPO_ROOT } from "./ascent.ts";
 import { DIMENSION_NAMES, type ScoreResult } from "./scoring.ts";
 
 const baseline = Object.fromEntries(DIMENSION_NAMES.map((d) => [d, 50]));
@@ -237,5 +237,19 @@ describe("packageDirs", () => {
     expect(() => packageDirs(dir)).toThrow("No sfdx-project.json");
     project([]);
     expect(() => packageDirs(dir)).toThrow();
+  });
+});
+
+describe("changedFiles", () => {
+  const holdout = ["force-app/main/default/classes/HoldoutTest.cls", "force-app/main/default/classes/HoldoutTest.cls-meta.xml"];
+
+  test("ignores deleted holdout files when git's output was trimmed", () => {
+    const porcelain = " D force-app/main/default/classes/HoldoutTest.cls\n D force-app/main/default/classes/HoldoutTest.cls-meta.xml".trim();
+    expect(changedFiles(porcelain, holdout)).toEqual([]);
+  });
+
+  test("reports other changed files", () => {
+    const porcelain = "D force-app/main/default/classes/HoldoutTest.cls\n M force-app/main/default/classes/App.cls";
+    expect(changedFiles(porcelain, holdout)).toEqual([" M force-app/main/default/classes/App.cls"]);
   });
 });

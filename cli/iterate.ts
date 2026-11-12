@@ -8,6 +8,7 @@ import {
   ascentDir,
   atSummit,
   bestScores,
+  changedFiles,
   ClaudeResult,
   classFiles,
   collectAndScore,
@@ -226,9 +227,7 @@ new Command()
       Object.assign(entry, plan, { focus: plan.focus.filter((f) => enabledDimensions(config.weights).includes(f)) });
       if (entry.focus!.length === 0) throw new Error("Plan names no known focus dimension");
       if (plan.edits.length === 0) throw new Error("Plan names no edits");
-      const planChanged = git(config.worktree, "status", "--porcelain")
-        .split("\n")
-        .filter((line) => line !== "" && !holdout.includes(line.slice(3)));
+      const planChanged = changedFiles(git(config.worktree, "status", "--porcelain"), holdout);
       if (planChanged.length > 0) throw new Error(`plan step changed files: ${planChanged.join(", ")}`);
       runStep(config, folder, "implement", implementPrompt(plan, editableBefore), entry);
       if (holdout.length > 0) git(config.worktree, "checkout", "HEAD", "--", ...holdout);
