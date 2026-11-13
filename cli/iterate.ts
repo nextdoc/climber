@@ -65,6 +65,8 @@ function summariseHistory(history: HistoryEntry[]): string {
     .join("\n");
 }
 
+const NO_PADDING = `Never pad. Padding is code that runs but that no test or caller depends on, written to raise a score. Examples: always-executed lines, statements or methods added to raise coverage; code split across more lines or methods so more lines run; inputs changed so a branch runs when it did not need to, such as passing an empty list instead of null; untested code moved onto a line that runs anyway, including with &&, || or a ternary. Tests cannot change, so coverage can only rise honestly by removing code that can never run.`;
+
 function planPrompt(config: AscentConfig, history: HistoryEntry[], editable: Set<string>): string {
   const current = kept(history).at(-1)!;
   const options = scoreOptions(config, current.run!);
@@ -75,6 +77,7 @@ A separate implement step will make your edits, in only these files:
 ${[...editable].filter((f) => f.endsWith(".cls")).join("\n")}
 Tests and fixtures cannot change. The tests define the required behaviour, so the change must keep every test passing.
 Fix static analysis findings in the code. A candidate that adds a suppression (a PMD rule in @SuppressWarnings, NOPMD, code-analyzer-suppress or sfge-disable) at any level is rejected without scoring.
+${NO_PADDING}
 
 Dimensions, each scored 0 to 100 (higher is better): ${enabledDimensions(config.weights).join(", ")}.
 A candidate is kept when every focus dimension rises by more than its margin and no other dimension falls by more than its margin.
@@ -115,6 +118,7 @@ Edit only these files:
 ${[...editable].filter((f) => f.endsWith(".cls")).join("\n")}
 Do not edit tests or fixtures, deploy, or run tests. The harness deploys, tests and scores your change.
 The tests define the required behaviour, so the change must keep every test passing.
+${NO_PADDING} Do not make an edit that pads, even if it is listed above.
 `;
 }
 
