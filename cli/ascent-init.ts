@@ -7,10 +7,13 @@ import {
   AscentConfig,
   AscentDefaults,
   ascentDir,
+  BASELINE_RUNS,
   collectAndScore,
+  combineRuns,
   formatApp,
   git,
   MCP_CONFIG,
+  measureNoise,
   packageDirs,
   REPO_ROOT,
   runDir,
@@ -81,18 +84,28 @@ new Command()
     mkdirSync(folder, { recursive: true });
     const result = await collectAndScore(config, folder);
     if (result.gated) throw new Error(`Baseline is gated by ${result.gate}; fix it before starting an ascent`);
+    const results = [result];
+    for (let i = 2; i <= BASELINE_RUNS; i++) {
+      const repeat = join(folder, "repeats", String(i));
+      mkdirSync(repeat, { recursive: true });
+      results.push(await collectAndScore(config, repeat, folder));
+    }
+    const noise = measureNoise(results.map(scoresByName), config.margins);
+    const margins = { ...config.margins, ...Object.fromEntries(Object.entries(noise).map(([d, n]) => [d, n.margin])) };
+    saveConfig({ ...config, margins, noise });
+    const baseline = combineRuns(results, "median");
     appendHistory(name, {
       iteration: 0,
       at,
       finishedAt: new Date().toISOString(),
       outcome: "baseline",
       dryRun: false,
-      scores: scoresByName(result),
-      overall: result.overall,
+      scores: baseline.scores,
+      overall: baseline.overall,
       commit: startCommit,
       run: folder
     });
     const report = writeReport(name);
-    console.log(JSON.stringify({ ascent: name, branch, worktree, baseline: scoresByName(result), overall: result.overall, report }, null, 2));
+    console.log(JSON.stringify({ ascent: name, branch, worktree, baseline: baseline.scores, overall: baseline.overall, noise, report }, null, 2));
   })
   .parseAsync();

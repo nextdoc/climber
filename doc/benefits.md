@@ -27,7 +27,7 @@ Evidence:
 
 The planner, the implementer and the scorer are separate. The harness deploys each candidate, or in Streamline mode runs it as anonymous Apex, runs PMD, Graph Engine and the tests, and scores it on the dimensions, weights and margins fixed at `ascent-init`. The harness decides keep or discard, not an agent. An agent cannot redefine success, skip a regression or declare victory early.
 
-The agent also cannot raise scores by weakening the tests. The implement step cannot run tests or deploy, and a change to a test or fixture is rejected. Holdout tests are hidden from the plan and implement steps, so a change that only satisfies the visible tests still fails.
+The agent also cannot raise scores by weakening the tests. The implement step cannot run tests or deploy, and a change to a test or fixture is rejected. So is a change that adds a static analysis suppression instead of fixing the finding. Holdout tests are hidden from the plan and implement steps, so a change that only satisfies the visible tests still fails.
 
 Evidence:
 

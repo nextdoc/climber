@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { compose } from "./compose.ts";
 import { ExtractError } from "./extract.ts";
-import { DIMENSION_NAMES, HALF_SCORES, scoreRun, weightOf, type ScoreOptions, type ScoreResult } from "./scoring.ts";
+import { DETERMINISTIC, DIMENSION_NAMES, HALF_SCORES, scoreRun, weightOf, type ScoreOptions, type ScoreResult } from "./scoring.ts";
 import { runVariants } from "./streamline.ts";
 
 export const REPO_ROOT = resolve(import.meta.dirname, "../..");
@@ -86,7 +86,9 @@ const AscentFields = z.strictObject({
   mode: z.enum(["deploy", "streamline"]).default("deploy"),
   /** The tests whose limit use scores limit headroom, each on its own. Resource efficiency leaves them out. */
   headroomTest: HeadroomTests,
-  streamline: StreamlineConfig.optional()
+  streamline: StreamlineConfig.optional(),
+  /** Set by ascent-init: the repeated baseline scores of each nondeterministic dimension and the margin measured from them. */
+  noise: z.partialRecord(Dimension, z.strictObject({ scores: z.array(z.number()), configured: z.number(), margin: z.number() })).optional()
 });
 
 export const AscentConfig = AscentFields.refine((c) => c.mode === "deploy" || c.streamline !== undefined, {
@@ -105,7 +107,8 @@ export const AscentDefaults = AscentFields.omit({
   worktree: true,
   targetOrg: true,
   createdAt: true,
-  baseCommit: true
+  baseCommit: true,
+  noise: true
 });
 
 /** What one agent step used. Cost is the agent CLI estimate at list price, when it reports one. */
@@ -279,9 +282,11 @@ const TEST_DIMENSIONS = ["Tests passing", "Code coverage", "Test run time", "Lim
 /**
  * Collects the run folder inputs, then scores them. Deploy mode deploys, analyses and runs the Apex tests.
  * Streamline mode analyses without deploying, then runs the composed variant scripts with Streamline.
+ * With reuseAnalysisFrom, it only re-runs the tests of the code already in the org, copying the deploy and analyser output from that folder.
  */
-export async function collectAndScore(config: AscentConfig, folder: string): Promise<ScoreResult> {
+export async function collectAndScore(config: AscentConfig, folder: string, reuseAnalysisFrom?: string): Promise<ScoreResult> {
   const streamline = config.mode === "streamline";
+  const reuse = reuseAnalysisFrom !== undefined;
   const prepare = join(REPO_ROOT, "cli/score-prepare.sh");
   const classes = [...config.testClasses.sample, ...config.testClasses.holdout].join(",");
   const off = (...names: string[]) => (names.every((n) => weightOf(config.weights, n) === 0) ? "1" : "");
@@ -289,14 +294,17 @@ export async function collectAndScore(config: AscentConfig, folder: string): Pro
   const result = run(prepare, [config.targetOrg, folder, classes], config.worktree, undefined, {
     ANALYZER_CONFIG: join(REPO_ROOT, "code-analyzer.yml"),
     ANALYZER_TARGETS: appClasses.join(","),
-    SKIP_DEPLOY: streamline ? "1" : "",
-    SKIP_PMD: off("PMD"),
-    SKIP_SFGE: off("Graph Engine"),
+    SKIP_DEPLOY: streamline || reuse ? "1" : "",
+    SKIP_PMD: reuse ? "1" : off("PMD"),
+    SKIP_SFGE: reuse ? "1" : off("Graph Engine"),
     SKIP_TESTS: streamline ? "1" : off(...TEST_DIMENSIONS),
     SKIP_LOGS: off("Limit headroom", "Resource efficiency")
   });
   writeFileSync(join(folder, "prepare.log"), result.stdout + result.stderr);
   if (result.status !== 0) throw new Error(`score-prepare failed, see ${join(folder, "prepare.log")}`);
+  for (const file of reuse ? ["deploy.json", "pmd.json", "sfge.json"] : []) {
+    if (existsSync(join(reuseAnalysisFrom!, file))) copyFileSync(join(reuseAnalysisFrom!, file), join(folder, file));
+  }
   if (streamline) {
     assertScratchOrg(config.targetOrg);
     try {
@@ -353,6 +361,92 @@ export function plateauDiscards(history: HistoryEntry[], margins: Record<string,
 /** True when no dimension can rise by more than its margin, so no candidate can be kept. */
 export function atSummit(scores: Record<string, number>, margins: Record<string, number>): boolean {
   return Object.entries(scores).every(([d, score]) => 100 - score <= (margins[d] ?? 0));
+}
+
+/** Each static analysis suppression in Apex source, once per occurrence: PMD rules in @SuppressWarnings, NOPMD comments and analyzer markers. */
+export function suppressions(source: string): string[] {
+  const found: string[] = [];
+  for (const [, values] of source.matchAll(/@SuppressWarnings\s*\(\s*'([^']*)'\s*\)/gi)) {
+    found.push(...values.split(",").map((v) => v.trim().toLowerCase()).filter((v) => v.startsWith("pmd")));
+  }
+  for (const [marker] of source.matchAll(/NOPMD|code-analyzer-suppress(\([^)]*\))?|sfge-disable[\w-]*/gi)) found.push(marker.toLowerCase());
+  return found;
+}
+
+/** Suppressions in `after` beyond those in `before`, so reformatting or moving an existing one adds nothing. */
+export function addedSuppressions(before: string, after: string): string[] {
+  const counts = new Map<string, number>();
+  for (const s of suppressions(before)) counts.set(s, (counts.get(s) ?? 0) + 1);
+  return suppressions(after).filter((s) => {
+    const left = counts.get(s) ?? 0;
+    counts.set(s, left - 1);
+    return left <= 0;
+  });
+}
+
+export const BASELINE_RUNS = 3;
+
+/** How many times the margin of a nondeterministic dimension is the range of its repeated baseline scores. */
+const NOISE_FACTOR = 1.5;
+
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+const mean = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
+
+const round = (n: number) => Math.round(n * 10) / 10;
+
+/** For each nondeterministic dimension, the larger of its configured margin and NOISE_FACTOR times the range of the repeated runs. */
+export function measureNoise(runs: Record<string, number>[], margins: Record<string, number>): NonNullable<AscentConfig["noise"]> {
+  const names = Object.keys(runs[0]).filter((d) => !DETERMINISTIC[d]);
+  return Object.fromEntries(
+    names.map((d) => {
+      const scores = runs.map((r) => r[d]);
+      const configured = margins[d] ?? 0;
+      return [d, { scores, configured, margin: round(Math.max(configured, NOISE_FACTOR * (Math.max(...scores) - Math.min(...scores)))) }];
+    })
+  );
+}
+
+/**
+ * Scores from several runs of the same code: nondeterministic dimensions combined (median or mean), the rest from the first run.
+ * The overall score is recomputed from the dimension weights of the first run.
+ */
+export function combineRuns(results: ScoreResult[], combine: "median" | "mean"): { scores: Record<string, number>; overall: number } {
+  const first = results[0].dimensions ?? [];
+  const runs = results.map(scoresByName);
+  const scores = Object.fromEntries(
+    first.map((d) => [d.name, DETERMINISTIC[d.name] ? d.score : round((combine === "median" ? median : mean)(runs.map((r) => r[d.name])))])
+  );
+  const totalWeight = first.reduce((sum, d) => sum + d.weight, 0);
+  return { scores, overall: round(first.reduce((sum, d) => sum + d.weight * scores[d.name], 0) / totalWeight) };
+}
+
+/**
+ * True when a discard rests only on nondeterministic dimensions that each miss their keep threshold by no more than
+ * their margin, so one more measurement could change the outcome.
+ */
+export function closeDiscard(
+  current: Record<string, number>,
+  best: Record<string, number>,
+  scores: Record<string, number>,
+  focus: string[],
+  margins: Record<string, number>
+): boolean {
+  let failed = false;
+  for (const [name, score] of Object.entries(scores)) {
+    if (score < (best[name] ?? 0) / 2) return false;
+    const delta = score - current[name];
+    const margin = margins[name] ?? 0;
+    const shortfall = focus.includes(name) ? margin - delta : -margin - delta;
+    if (focus.includes(name) ? delta > margin : delta >= -margin) continue;
+    if (DETERMINISTIC[name] || shortfall > margin) return false;
+    failed = true;
+  }
+  return failed;
 }
 
 /**

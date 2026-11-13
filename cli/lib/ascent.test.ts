@@ -1,7 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { AscentConfig, atSummit, changedFiles, classFiles, consecutiveDiscards, decide, HistoryEntry, packageDirs, plateauDiscards, REPO_ROOT } from "./ascent.ts";
+import {
+  addedSuppressions,
+  AscentConfig,
+  atSummit,
+  changedFiles,
+  classFiles,
+  closeDiscard,
+  combineRuns,
+  consecutiveDiscards,
+  decide,
+  HistoryEntry,
+  measureNoise,
+  packageDirs,
+  plateauDiscards,
+  REPO_ROOT
+} from "./ascent.ts";
 import { DIMENSION_NAMES, type ScoreResult } from "./scoring.ts";
 
 const baseline = Object.fromEntries(DIMENSION_NAMES.map((d) => [d, 50]));
@@ -251,5 +266,86 @@ describe("changedFiles", () => {
   test("reports other changed files", () => {
     const porcelain = "D force-app/main/default/classes/HoldoutTest.cls\n M force-app/main/default/classes/App.cls";
     expect(changedFiles(porcelain, holdout)).toEqual([" M force-app/main/default/classes/App.cls"]);
+  });
+});
+
+describe("addedSuppressions", () => {
+  const base = "@SuppressWarnings('PMD.ApexDoc, PMD.CyclomaticComplexity')\npublic class A {\n  Integer i = 0; // NOPMD\n}";
+
+  test("finds a rule added to an existing class-level list", () => {
+    const after = base.replace("PMD.CyclomaticComplexity", "PMD.CyclomaticComplexity, PMD.OneDeclarationPerLine");
+    expect(addedSuppressions(base, after)).toEqual(["pmd.onedeclarationperline"]);
+  });
+
+  test("finds method-level annotations and line-level markers", () => {
+    const after = base.replace("public class A {", "public class A {\n  @SuppressWarnings('pmd.AvoidDebugStatements')\n  void m() { x(); /* sfge-disable-next-line */ } // NOPMD");
+    expect(addedSuppressions(base, after)).toEqual(["pmd.avoiddebugstatements", "sfge-disable-next-line", "nopmd"]);
+  });
+
+  test("ignores reformatted or reordered existing suppressions and non-PMD values", () => {
+    const after = base.replace("'PMD.ApexDoc, PMD.CyclomaticComplexity'", "'PMD.CyclomaticComplexity,PMD.ApexDoc'") + "\n@SuppressWarnings('unchecked')";
+    expect(addedSuppressions(base, after)).toEqual([]);
+  });
+
+  test("counts every suppression of a new file", () => {
+    expect(addedSuppressions("", base)).toEqual(["pmd.apexdoc", "pmd.cyclomaticcomplexity", "nopmd"]);
+  });
+});
+
+describe("measureNoise", () => {
+  test("sets nondeterministic margins to 1.5 times the range, never below the configured margin", () => {
+    const runs = [
+      { PMD: 40, "Limit headroom": 60, "Resource efficiency": 80, "Test run time": 82 },
+      { PMD: 40, "Limit headroom": 64, "Resource efficiency": 80.4, "Test run time": 81 },
+      { PMD: 40, "Limit headroom": 62, "Resource efficiency": 80.2, "Test run time": 82 }
+    ];
+    expect(measureNoise(runs, { PMD: 0.5, "Limit headroom": 5, "Resource efficiency": 1, "Test run time": 1 })).toEqual({
+      "Limit headroom": { scores: [60, 64, 62], configured: 5, margin: 6 },
+      "Resource efficiency": { scores: [80, 80.4, 80.2], configured: 1, margin: 1 },
+      "Test run time": { scores: [82, 81, 82], configured: 1, margin: 1.5 }
+    });
+  });
+});
+
+describe("combineRuns", () => {
+  const run = (pmd: number, headroom: number): ScoreResult => ({
+    gated: false,
+    overall: 0,
+    dimensions: [
+      { name: "PMD", weight: 1, score: pmd },
+      { name: "Limit headroom", weight: 1, score: headroom }
+    ]
+  });
+
+  test("takes the median of nondeterministic dimensions and the first run of the rest", () => {
+    expect(combineRuns([run(40, 60), run(99, 70), run(99, 64)], "median")).toEqual({ scores: { PMD: 40, "Limit headroom": 64 }, overall: 52 });
+  });
+
+  test("averages nondeterministic dimensions", () => {
+    expect(combineRuns([run(40, 60), run(40, 63)], "mean").scores["Limit headroom"]).toBe(61.5);
+  });
+});
+
+describe("closeDiscard", () => {
+  const best = baseline;
+
+  test("is true when a noisy dimension falls by less than twice its margin", () => {
+    expect(closeDiscard(baseline, best, { ...baseline, PMD: 60, "Resource efficiency": 48.5 }, ["PMD"], margins)).toBe(true);
+  });
+
+  test("is true when a noisy focus misses its margin by no more than the margin", () => {
+    expect(closeDiscard(baseline, best, { ...baseline, "Limit headroom": 50.5 }, ["Limit headroom"], margins)).toBe(true);
+  });
+
+  test("is false when a noisy dimension falls by more than twice its margin", () => {
+    expect(closeDiscard(baseline, best, { ...baseline, PMD: 60, "Resource efficiency": 47.5 }, ["PMD"], margins)).toBe(false);
+  });
+
+  test("is false when a deterministic dimension fails", () => {
+    expect(closeDiscard(baseline, best, { ...baseline, PMD: 60, "Code coverage": 48.5, "Resource efficiency": 48.5 }, ["PMD"], margins)).toBe(false);
+  });
+
+  test("is false when nothing failed", () => {
+    expect(closeDiscard(baseline, best, { ...baseline, PMD: 60 }, ["PMD"], margins)).toBe(false);
   });
 });

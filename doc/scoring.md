@@ -104,6 +104,14 @@ Every dimension is classified as deterministic or nondeterministic (`DETERMINIST
 | Limit headroom | No | Driven by CPU time, which varies between runs |
 | Resource efficiency | No | Counts repeat exactly, but CPU time varies |
 
+`ascent-init` runs the baseline tests 3 times without redeploying. Each nondeterministic margin becomes the larger of its configured margin and 1.5 times the range of the 3 scores, and the baseline scores are their median. The measured scores and margins are saved as `noise` in the ascent's `ascent.json`.
+
+A discard is close when it rests only on nondeterministic dimensions and each misses its keep threshold by no more than its margin. `iterate` then runs the tests once more without redeploying, averages the nondeterministic scores of the two runs and decides again. Only discards are re-measured, so a lucky single run can still be kept.
+
+## Suppressions
+
+A candidate that adds a static analysis suppression to a climbed class is rejected without scoring: a PMD rule in `@SuppressWarnings` at class or method level, `NOPMD`, `code-analyzer-suppress` or `sfge-disable`. Suppressions are compared with the last kept commit, so reformatting or moving an existing one is not rejected. Suppressions already in the baseline stay.
+
 ## Overall score
 
 Weighted mean of the dimension scores, 0–100.

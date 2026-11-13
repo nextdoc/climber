@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { Command } from "commander";
 import { z } from "zod";
 import {
+  addedSuppressions,
   appendHistory,
   ascentDir,
   atSummit,
@@ -11,7 +12,9 @@ import {
   changedFiles,
   ClaudeResult,
   classFiles,
+  closeDiscard,
   collectAndScore,
+  combineRuns,
   consecutiveDiscards,
   decide,
   editableFiles,
@@ -71,6 +74,7 @@ Plan one candidate: 1 to 6 related edits aimed at one weakness. Read the code, b
 A separate implement step will make your edits, in only these files:
 ${[...editable].filter((f) => f.endsWith(".cls")).join("\n")}
 Tests and fixtures cannot change. The tests define the required behaviour, so the change must keep every test passing.
+Fix static analysis findings in the code. A candidate that adds a suppression (a PMD rule in @SuppressWarnings, NOPMD, code-analyzer-suppress or sfge-disable) at any level is rejected without scoring.
 
 Dimensions, each scored 0 to 100 (higher is better): ${enabledDimensions(config.weights).join(", ")}.
 A candidate is kept when every focus dimension rises by more than its margin and no other dimension falls by more than its margin.
@@ -247,19 +251,38 @@ new Command()
         const editable = new Set([...editableBefore, ...editableFiles(config)]);
         const forbidden = changed.filter((f) => !editable.has(f));
         const discarded = history.filter((e) => !e.dryRun && e.outcome !== "keep" && e.outcome !== "baseline");
+        const suppressed = changed
+          .filter((f) => editable.has(f) && f.endsWith(".cls"))
+          .flatMap((f) => {
+            const before = run("git", ["show", `HEAD:${f}`], config.worktree);
+            const after = existsSync(join(config.worktree, f)) ? readFileSync(join(config.worktree, f), "utf8") : "";
+            return addedSuppressions(before.status === 0 ? before.stdout : "", after).map((s) => `${basename(f)} ${s}`);
+          });
         if (forbidden.length > 0) {
           entry.outcome = "rejected";
           entry.decision = [`edited files outside the application: ${forbidden.join(", ")}`];
         } else if (discarded.some((e) => e.patchHash === entry.patchHash)) {
           entry.outcome = "rejected";
           entry.decision = ["repeats a discarded change"];
+        } else if (suppressed.length > 0) {
+          entry.outcome = "rejected";
+          entry.decision = [`adds static analysis suppressions, which hide findings instead of fixing them: ${suppressed.join(", ")}`];
         } else {
           const result = await collectAndScore(config, folder);
           const current = kept(history).at(-1)!;
-          const decision = decide(current.scores!, bestScores(history), result, entry.focus, config.margins, current.overall);
+          let decision = decide(current.scores!, bestScores(history), result, entry.focus, config.margins, current.overall);
+          let scored = { scores: scoresByName(result), overall: result.overall };
+          const close = decision.outcome === "discard" && closeDiscard(current.scores!, bestScores(history), scored.scores, entry.focus!, config.margins);
+          if (close) {
+            const again = await collectAndScore(config, join(folder, "remeasure"), folder);
+            scored = combineRuns([result, again], "mean");
+            const averaged = { ...result, overall: scored.overall, dimensions: result.dimensions!.map((d) => ({ ...d, score: scored.scores[d.name] })) };
+            decision = decide(current.scores!, bestScores(history), averaged, entry.focus, config.margins, current.overall);
+            decision.reasons.unshift(`re-measured a close discard and averaged the noisy dimensions over 2 runs (first run ${JSON.stringify(scoresByName(result))})`);
+          }
           Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
-          if (result.dimensions) entry.scores = scoresByName(result);
-          entry.overall = result.overall;
+          if (result.dimensions) entry.scores = scored.scores;
+          entry.overall = scored.overall;
         }
       }
 
