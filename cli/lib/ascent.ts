@@ -472,6 +472,15 @@ export function closeDiscard(
   return failed;
 }
 
+/** The mirror of closeDiscard: true when a nondeterministic focus dimension clears its keep threshold by no more than its margin. */
+export function closeKeep(current: Record<string, number>, scores: Record<string, number>, focus: string[], margins: Record<string, number>): boolean {
+  return focus.some((name) => {
+    const margin = margins[name] ?? 0;
+    const surplus = scores[name] - current[name] - margin;
+    return !DETERMINISTIC[name] && surplus > 0 && surplus <= margin;
+  });
+}
+
 /**
  * The keep rule from doc/design.md: every focus dimension rises by more than its margin, no other dimension
  * falls by more than its margin, and no dimension drops below half its best score. A candidate whose only

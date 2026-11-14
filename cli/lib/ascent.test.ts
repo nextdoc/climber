@@ -8,6 +8,7 @@ import {
   changedFiles,
   classFiles,
   closeDiscard,
+  closeKeep,
   combineRuns,
   consecutiveDiscards,
   decide,
@@ -355,5 +356,27 @@ describe("closeDiscard", () => {
 
   test("is false when nothing failed", () => {
     expect(closeDiscard(baseline, best, { ...baseline, PMD: 60 }, ["PMD"], margins)).toBe(false);
+  });
+});
+
+describe("closeKeep", () => {
+  test("is true when a noisy focus rises by more than its margin but no more than twice it", () => {
+    expect(closeKeep(baseline, { ...baseline, "Limit headroom": 52 }, ["Limit headroom"], margins)).toBe(true);
+  });
+
+  test("is false when a noisy focus rises by more than twice its margin", () => {
+    expect(closeKeep(baseline, { ...baseline, "Limit headroom": 52.5 }, ["Limit headroom"], margins)).toBe(false);
+  });
+
+  test("is false when a noisy focus does not clear its margin", () => {
+    expect(closeKeep(baseline, { ...baseline, "Limit headroom": 51 }, ["Limit headroom"], margins)).toBe(false);
+  });
+
+  test("is false when only a deterministic focus clears its margin narrowly", () => {
+    expect(closeKeep(baseline, { ...baseline, PMD: 51.5 }, ["PMD"], margins)).toBe(false);
+  });
+
+  test("is true when one of several focus dimensions is a narrow noisy gain", () => {
+    expect(closeKeep(baseline, { ...baseline, PMD: 60, "Limit headroom": 51.5 }, ["PMD", "Limit headroom"], margins)).toBe(true);
   });
 });

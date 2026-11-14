@@ -108,7 +108,7 @@ Every dimension is classified as deterministic or nondeterministic (`DETERMINIST
 
 `ascent-init` runs the baseline tests 3 times without redeploying. Each nondeterministic margin becomes the larger of its configured margin and 1.5 times the range of the 3 scores, and the baseline scores are their median. The measured scores and margins are saved as `noise` in the ascent's `ascent.json`.
 
-A discard is close when it rests only on nondeterministic dimensions and each misses its keep threshold by no more than its margin. `iterate` then runs the tests once more without redeploying, averages the nondeterministic scores of the two runs and decides again. Only discards are re-measured, so a lucky single run can still be kept.
+A discard is close when it rests only on nondeterministic dimensions and each misses its keep threshold by no more than its margin. `iterate` then runs the tests once more without redeploying, averages the nondeterministic scores of the two runs and decides again. A keep is close in the same way when a nondeterministic focus dimension rises by more than its margin but by no more than twice its margin, so one more run could take it back under. `iterate` re-measures it the same way, so a lucky single run is not kept on its own. The decision records the re-measure and the first run's scores.
 
 ## Suppressions
 

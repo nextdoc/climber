@@ -13,6 +13,7 @@ import {
   ClaudeResult,
   classFiles,
   closeDiscard,
+  closeKeep,
   collectAndScore,
   combineRuns,
   consecutiveDiscards,
@@ -276,13 +277,16 @@ new Command()
           const current = kept(history).at(-1)!;
           let decision = decide(current.scores!, bestScores(history), result, entry.focus, config.margins, current.overall);
           let scored = { scores: scoresByName(result), overall: result.overall };
-          const close = decision.outcome === "discard" && closeDiscard(current.scores!, bestScores(history), scored.scores, entry.focus!, config.margins);
+          const close =
+            (decision.outcome === "discard" && closeDiscard(current.scores!, bestScores(history), scored.scores, entry.focus!, config.margins)) ||
+            (decision.outcome === "keep" && closeKeep(current.scores!, scored.scores, entry.focus!, config.margins));
           if (close) {
+            const first = decision.outcome;
             const again = await collectAndScore(config, join(folder, "remeasure"), folder);
             scored = combineRuns([result, again], "mean");
             const averaged = { ...result, overall: scored.overall, dimensions: result.dimensions!.map((d) => ({ ...d, score: scored.scores[d.name] })) };
             decision = decide(current.scores!, bestScores(history), averaged, entry.focus, config.margins, current.overall);
-            decision.reasons.unshift(`re-measured a close discard and averaged the noisy dimensions over 2 runs (first run ${JSON.stringify(scoresByName(result))})`);
+            decision.reasons.unshift(`re-measured a close ${first} and averaged the noisy dimensions over 2 runs (first run ${JSON.stringify(scoresByName(result))})`);
           }
           Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
           if (result.dimensions) entry.scores = scored.scores;
