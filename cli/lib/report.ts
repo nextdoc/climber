@@ -56,6 +56,7 @@ export function reportData(config: AscentConfig, history: HistoryEntry[]) {
         focus: e.focus ?? [],
         reason: e.reason,
         decision: e.decision ?? [],
+        flags: e.flags ?? [],
         learning: e.learning,
         deltas,
         patch: e.patch && relative(dir, e.patch),

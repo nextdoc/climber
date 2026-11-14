@@ -138,6 +138,7 @@ export const HistoryEntry = z.strictObject({
   edits: z.array(z.string()).optional(),
   probes: z.array(z.string()).optional(),
   decision: z.array(z.string()).optional(),
+  flags: z.array(z.string()).optional(),
   learning: z.string().optional(),
   scores: SomeDimensions.optional(),
   overall: z.number().optional(),
@@ -479,6 +480,14 @@ export function closeKeep(current: Record<string, number>, scores: Record<string
     const surplus = scores[name] - current[name] - margin;
     return !DETERMINISTIC[name] && surplus > 0 && surplus <= margin;
   });
+}
+
+/** Notes on a keep that a person should review. Tests cannot change, so a coverage rise can only come from removing or restructuring application code. */
+export function reviewFlags(current: Record<string, number>, scores: Record<string, number>, margins: Record<string, number>): string[] {
+  const rise = scores["Code coverage"] - current["Code coverage"];
+  return rise > (margins["Code coverage"] ?? 0)
+    ? [`Code coverage rose by ${rise.toFixed(1)} with no test change: check that the removed or restructured code could never run`]
+    : [];
 }
 
 /**

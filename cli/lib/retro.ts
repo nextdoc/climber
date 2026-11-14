@@ -71,13 +71,14 @@ export function retroInputs(config: AscentConfig, history: HistoryEntry[], specs
     ),
     iterations: history
       .filter((e) => !e.dryRun && e.outcome !== "baseline")
-      .map(({ iteration, outcome, focus, reason, edits, decision, learning }) => ({
+      .map(({ iteration, outcome, focus, reason, edits, decision, flags, learning }) => ({
         iteration,
         outcome,
         focus,
         reason,
         edits,
         decision,
+        flags,
         learning
       })),
     specs: specs.map((path) => ({ path, text: readFileSync(path, "utf8") }))
@@ -106,7 +107,7 @@ ${JSON.stringify(inputs.baselineUnitScores)} ${JSON.stringify(inputs.currentUnit
 Requirements:
 ${specs}
 
-Iterations, with each plan's reason, the decision and the learning:
+Iterations, with each plan's reason, the decision, any flags for review and the learning:
 ${JSON.stringify(inputs.iterations, null, 1)}
 
 Diff of the application classes from baseline to evolved:

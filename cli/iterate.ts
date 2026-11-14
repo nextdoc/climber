@@ -14,6 +14,7 @@ import {
   classFiles,
   closeDiscard,
   closeKeep,
+  reviewFlags,
   collectAndScore,
   combineRuns,
   consecutiveDiscards,
@@ -291,6 +292,8 @@ new Command()
           Object.assign(entry, { outcome: decision.outcome, decision: decision.reasons, run: folder });
           if (result.dimensions) entry.scores = scored.scores;
           entry.overall = scored.overall;
+          const flags = decision.outcome === "keep" ? reviewFlags(current.scores!, scored.scores, config.margins) : [];
+          if (flags.length > 0) entry.flags = flags;
         }
       }
 

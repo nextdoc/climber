@@ -245,11 +245,11 @@ document.getElementById('iterations').innerHTML = `
   <tr><th class="num">#</th><th>Outcome</th><th class="num">Overall</th><th>Changes vs kept</th><th>Plan, decision and learning</th><th>Files</th></tr>
   ${[...data.rows].reverse().map(r => `<tr>
     <td class="num">${r.iteration}</td>
-    <td><span class="pill" style="background:${colour(r.outcome)}">${esc(r.outcome)}</span>${r.dryRun ? '<div><span class="tag">dry run</span></div>' : ''}
+    <td><span class="pill" style="background:${colour(r.outcome)}">${esc(r.outcome)}</span>${r.dryRun ? '<div><span class="tag">dry run</span></div>' : ''}${r.flags.length ? '<div><span class="tag">review</span></div>' : ''}
       ${r.focus.length ? `<div class="focus" style="margin-top:6px">${esc(r.focus.join(', '))}</div>` : ''}</td>
     <td class="num">${f(r.overall)}</td>
     <td>${deltas(r)}</td>
-    <td class="notes">${note('Reason', r.reason)}${note('Decision', r.decision.join('; '))}${note('Learning', r.learning)}</td>
+    <td class="notes">${note('Reason', r.reason)}${note('Decision', r.decision.join('; '))}${note('Review', r.flags.join('; '))}${note('Learning', r.learning)}</td>
     <td>${link('patch', r.patch)}${link('run', r.run)}</td></tr>`).join('') || '<tr><td colspan="6" class="focus">No iterations yet.</td></tr>'}`;
 
 if (data.retro) {

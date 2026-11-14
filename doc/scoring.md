@@ -110,6 +110,8 @@ Every dimension is classified as deterministic or nondeterministic (`DETERMINIST
 
 A discard is close when it rests only on nondeterministic dimensions and each misses its keep threshold by no more than its margin. `iterate` then runs the tests once more without redeploying, averages the nondeterministic scores of the two runs and decides again. A keep is close in the same way when a nondeterministic focus dimension rises by more than its margin but by no more than twice its margin, so one more run could take it back under. `iterate` re-measures it the same way, so a lucky single run is not kept on its own. The decision records the re-measure and the first run's scores.
 
+A keep whose code coverage rises by more than its margin gets a `flags` entry in the history. Tests cannot change, so the rise came from removing or restructuring application code, and a person should check that the code could never run. The report marks the iteration for review and the retro sees the flag. The flag does not change the decision.
+
 ## Suppressions
 
 A candidate that adds a static analysis suppression to a climbed class is rejected without scoring: a PMD rule in `@SuppressWarnings` at class or method level, `NOPMD`, `code-analyzer-suppress` or `sfge-disable`. Suppressions are compared with the last kept commit, so reformatting or moving an existing one is not rejected. Suppressions already in the baseline stay.

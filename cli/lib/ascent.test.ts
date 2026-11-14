@@ -9,6 +9,7 @@ import {
   classFiles,
   closeDiscard,
   closeKeep,
+  reviewFlags,
   combineRuns,
   consecutiveDiscards,
   decide,
@@ -378,5 +379,17 @@ describe("closeKeep", () => {
 
   test("is true when one of several focus dimensions is a narrow noisy gain", () => {
     expect(closeKeep(baseline, { ...baseline, PMD: 60, "Limit headroom": 51.5 }, ["PMD", "Limit headroom"], margins)).toBe(true);
+  });
+});
+
+describe("reviewFlags", () => {
+  const before = { "Code coverage": 80 };
+  test("flags a coverage rise above its margin", () => {
+    expect(reviewFlags(before, { "Code coverage": 83 }, { "Code coverage": 1 })).toHaveLength(1);
+  });
+  test("ignores a rise within its margin, a fall, or no coverage score", () => {
+    expect(reviewFlags(before, { "Code coverage": 80.5 }, { "Code coverage": 1 })).toEqual([]);
+    expect(reviewFlags(before, { "Code coverage": 70 }, {})).toEqual([]);
+    expect(reviewFlags({}, {}, {})).toEqual([]);
   });
 });
