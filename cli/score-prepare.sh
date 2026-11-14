@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Collects the raw inputs for cli/score.ts into one output directory.
+# PMD_RULE_SELECTOR replaces the PMD rule selector, pmd, to leave rules out.
 # SKIP_PMD, SKIP_SFGE, SKIP_TESTS and SKIP_LOGS set to 1 skip the inputs of dimensions with weight 0.
 # SKIP_DEPLOY set to 1 skips the deploy and its compile gate, for streamline mode, which compiles in its scripts.
 set -uo pipefail
@@ -44,7 +45,7 @@ IFS=, read -ra FILES <<< "${ANALYZER_TARGETS:-$(IFS=,; echo "${PACKAGE_DIRS[*]}"
 for f in "${FILES[@]}"; do TARGETS+=(--target "$f"); done
 CONFIG=()
 [ -n "${ANALYZER_CONFIG:-}" ] && CONFIG=(--config-file "$ANALYZER_CONFIG")
-[ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector pmd "${TARGETS[@]}" --output-file "$OUT/pmd.json" || exit 1
+[ "${SKIP_PMD:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector "${PMD_RULE_SELECTOR:-pmd}" "${TARGETS[@]}" --output-file "$OUT/pmd.json" || exit 1
 [ "${SKIP_SFGE:-}" = 1 ] || sf code-analyzer run ${CONFIG[@]+"${CONFIG[@]}"} --rule-selector sfge "${WORKSPACES[@]}" "${TARGETS[@]}" --output-file "$OUT/sfge.json" || exit 1
 [ "${SKIP_TESTS:-}" = 1 ] && exit 0
 

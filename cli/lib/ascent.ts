@@ -80,6 +80,8 @@ const AscentFields = z.strictObject({
   weights: z.partialRecord(Dimension, z.number().nonnegative()).default({}),
   /** Overrides the default half-score penalty of the dimensions scored by one. Fixed per ascent, because scores from different values differ. */
   halfScores: z.partialRecord(z.enum(Object.keys(HALF_SCORES) as [string, ...string[]]), z.number().positive()).default({}),
+  /** PMD rules left out of the PMD dimension, such as style rules a codebase deliberately does not follow. Fixed per ascent. */
+  excludedPmdRules: z.array(z.string().min(1)).default([]),
   /** Lets the plan step run anonymous Apex probes with Streamline. Fixed per ascent so ascents with and without it can be compared. */
   plannerStreamline: z.boolean().default(false),
   /** How runs collect their inputs. Fixed per ascent, because scores from the two modes differ. */
@@ -277,6 +279,26 @@ export function scoreOptions(config: AscentConfig, folder: string): ScoreOptions
   };
 }
 
+/** A Code Analyzer rule selector for every rule in pmdRules except the excluded ones. */
+export function pmdSelector(pmdRules: string[], excluded: string[]): string {
+  const unknown = excluded.filter((r) => !pmdRules.includes(r));
+  if (unknown.length > 0) throw new Error(`Unknown PMD rules in excludedPmdRules: ${unknown.join(", ")}`);
+  return excluded.length === 0 ? "pmd" : `pmd:(${pmdRules.filter((r) => !excluded.includes(r)).join(",")})`;
+}
+
+/** Lists the PMD rules once per runs folder, since score-prepare empties each run folder. */
+function pmdRuleSelector(config: AscentConfig, folder: string): string {
+  if (config.excludedPmdRules.length === 0) return "pmd";
+  const out = join(folder, "..", "pmd-rules.json");
+  if (!existsSync(out)) {
+    mkdirSync(join(folder, ".."), { recursive: true });
+    const result = run("sf", ["code-analyzer", "rules", "--rule-selector", "pmd", "--output-file", out], config.worktree);
+    if (result.status !== 0) throw new Error(`sf code-analyzer rules failed: ${result.stderr}`);
+  }
+  const rules: { name: string }[] = JSON.parse(readFileSync(out, "utf8")).rules;
+  return pmdSelector(rules.map((r) => r.name), config.excludedPmdRules);
+}
+
 const TEST_DIMENSIONS = ["Tests passing", "Code coverage", "Test run time", "Limit headroom", "Resource efficiency"];
 
 /**
@@ -293,6 +315,7 @@ export async function collectAndScore(config: AscentConfig, folder: string, reus
   const appClasses = [...editableFiles(config)].filter((f) => f.endsWith(".cls"));
   const result = run(prepare, [config.targetOrg, folder, classes], config.worktree, undefined, {
     ANALYZER_CONFIG: join(REPO_ROOT, "code-analyzer.yml"),
+    PMD_RULE_SELECTOR: reuse || off("PMD") ? "pmd" : pmdRuleSelector(config, folder),
     ANALYZER_TARGETS: appClasses.join(","),
     SKIP_DEPLOY: streamline || reuse ? "1" : "",
     SKIP_PMD: reuse ? "1" : off("PMD"),

@@ -8,6 +8,8 @@ The half-score penalty `K` is the penalty that scores exactly 50. It sets how st
 
 The default `K` values below are tuned to the sample code. Code much larger or smaller than the sample can start near 0 or 100, which leaves little room to show progress. To change them, set `halfScores` in `ascent.config.json`, such as `"halfScores": {"PMD": 200}`. PMD, Graph Engine, Test run time and Resource efficiency take a `K`, and an unset dimension keeps its default. An ascent keeps the values it started with, so its scores stay comparable. The map scores every group with the same values, so groups share one colour scale.
 
+To leave PMD rules out of the PMD dimension, such as style rules a codebase deliberately does not follow, list them in `excludedPmdRules`, such as `"excludedPmdRules": ["IfStmtsMustUseBraces"]`. PMD then runs every other PMD rule. An unknown rule name stops the run. Like `halfScores`, the list is fixed per ascent.
+
 ## Dimensions
 
 Example, the PMD baseline: PMD reports 6 High, 12 Moderate and 10 Low violations in `AccountHealthRollup.cls`. The penalty is `P` = 6 × 8 + 12 × 4 + 10 × 2 = 116. With `K` = 50, the score is 100 × 50 / (50 + 116) = 30.1.

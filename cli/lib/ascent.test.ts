@@ -15,6 +15,7 @@ import {
   measureNoise,
   packageDirs,
   plateauDiscards,
+  pmdSelector,
   REPO_ROOT
 } from "./ascent.ts";
 import { DIMENSION_NAMES, type ScoreResult } from "./scoring.ts";
@@ -185,6 +186,13 @@ describe("AscentConfig", () => {
     expect(AscentConfig.safeParse({ ...config, halfScores: { PMD: 100 } }).success).toBe(true);
     expect(AscentConfig.safeParse({ ...config, halfScores: { "Code coverage": 100 } }).success).toBe(false);
     expect(AscentConfig.safeParse({ ...config, halfScores: { PMD: 0 } }).success).toBe(false);
+  });
+
+  test("selects every PMD rule but the excluded ones, and rejects unknown rule names", () => {
+    expect(AscentConfig.parse(config).excludedPmdRules).toEqual([]);
+    expect(pmdSelector(["A", "B", "C"], [])).toBe("pmd");
+    expect(pmdSelector(["A", "B", "C"], ["B"])).toBe("pmd:(A,C)");
+    expect(() => pmdSelector(["A", "B"], ["Z"])).toThrow("Unknown PMD rules in excludedPmdRules: Z");
   });
 
   test("reads one headroom test or streamline suite as a list of one", () => {
