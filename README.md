@@ -18,6 +18,11 @@ The out-of-the-box dimensions:
 - Limit headroom: governor limit use for one batch of 200 records
 - Resource efficiency: governor limit use across the other tests
 
+Read more about Climber on the NextDoc blog:
+
+- [Hill Climbing Apex Code](https://nextdoc.io/blog/hill-climbing-apex-code.html)
+- [Climbing FFLib](https://nextdoc.io/blog/climbing-fflib.html)
+
 To try it, follow the [quick start](#quick-start) to climb the included sample classes in a scratch org.
 
 [![The report of a deploy-mode ascent of the AccountHealthRollup sample class](doc/images/report.png)](https://nextdoc.github.io/climber/account-health-deploy.html)
